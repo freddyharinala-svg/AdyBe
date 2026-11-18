@@ -1,0 +1,2322 @@
+{
+  "version": 1,
+  "size": 800,
+  "seed": 42,
+  "spawnClearRadius": 12,
+  "base": {
+    "amplitude": 13,
+    "offset": 0.22,
+    "scale": 6.4,
+    "octaves": 5,
+    "lacunarity": 2,
+    "gain": 0.5
+  },
+  "mountains": {
+    "innerRadius": 264,
+    "outerRadius": 396,
+    "minHeight": 38,
+    "ridge": 22,
+    "ridge2": 18
+  },
+  "towns": [
+    {
+      "id": "thalvorn",
+      "name": "Thalvorn",
+      "x": 0,
+      "z": 0,
+      "radius": 48,
+      "blend": 26
+    },
+    {
+      "id": "mireval",
+      "name": "Mireval",
+      "x": 196,
+      "z": 136,
+      "radius": 30,
+      "blend": 18
+    },
+    {
+      "id": "roches",
+      "name": "Roches-Noires",
+      "x": 64,
+      "z": -244,
+      "radius": 26,
+      "blend": 16
+    }
+  ],
+  "roads": [
+    {
+      "id": "north-south",
+      "width": 7,
+      "points": [
+        [
+          -16,
+          -316
+        ],
+        [
+          -6,
+          -160
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          8,
+          160
+        ],
+        [
+          18,
+          316
+        ]
+      ]
+    },
+    {
+      "id": "east-west",
+      "width": 7,
+      "points": [
+        [
+          -316,
+          -12
+        ],
+        [
+          -160,
+          -4
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          160,
+          6
+        ],
+        [
+          316,
+          12
+        ]
+      ]
+    },
+    {
+      "id": "mireval",
+      "width": 6,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          84,
+          44
+        ],
+        [
+          144,
+          90
+        ],
+        [
+          196,
+          136
+        ]
+      ]
+    },
+    {
+      "id": "mireval-ring",
+      "width": 5.5,
+      "points": [
+        [
+          196,
+          136
+        ],
+        [
+          224,
+          60
+        ],
+        [
+          220,
+          -40
+        ],
+        [
+          180,
+          -120
+        ],
+        [
+          120,
+          -200
+        ],
+        [
+          64,
+          -244
+        ]
+      ]
+    },
+    {
+      "id": "roches",
+      "width": 6,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -8,
+          -100
+        ],
+        [
+          20,
+          -180
+        ],
+        [
+          64,
+          -244
+        ]
+      ]
+    },
+    {
+      "id": "west-trail",
+      "width": 5,
+      "points": [
+        [
+          -160,
+          -4
+        ],
+        [
+          -204,
+          -60
+        ],
+        [
+          -140,
+          -140
+        ],
+        [
+          -60,
+          -192
+        ],
+        [
+          20,
+          -180
+        ]
+      ]
+    },
+    {
+      "id": "north-track",
+      "width": 5,
+      "points": [
+        [
+          8,
+          160
+        ],
+        [
+          76,
+          220
+        ],
+        [
+          140,
+          260
+        ]
+      ]
+    }
+  ],
+  "villages": [
+    {
+      "id": "thalvorn",
+      "name": "Thalvorn",
+      "x": 0,
+      "z": 0,
+      "radius": 48,
+      "hamlet": false,
+      "houses": [
+        {
+          "id": "thalvorn_h1",
+          "model": "house03",
+          "x": -9.39,
+          "z": 10.48,
+          "rotationY": 1.62,
+          "height": 5.75,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 1.62
+        },
+        {
+          "id": "thalvorn_h2",
+          "model": "house04",
+          "x": -9.85,
+          "z": -9.24,
+          "rotationY": -0.02,
+          "height": 6.4,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": -0.02
+        },
+        {
+          "id": "thalvorn_h3",
+          "model": "house03",
+          "x": 7.94,
+          "z": -15.68,
+          "rotationY": -1.53,
+          "height": 5.87,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": -1.53
+        },
+        {
+          "id": "thalvorn_h4",
+          "model": "house03",
+          "x": 10.05,
+          "z": 19.52,
+          "rotationY": -1.52,
+          "height": 5.69,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": -1.52
+        },
+        {
+          "id": "thalvorn_h5",
+          "model": "house04",
+          "x": -8.19,
+          "z": 25.44,
+          "rotationY": 1.62,
+          "height": 6.35,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 1.62
+        },
+        {
+          "id": "thalvorn_h6",
+          "model": "house03",
+          "x": 25.31,
+          "z": -7.73,
+          "rotationY": -0.04,
+          "height": 5.43,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": -0.04
+        },
+        {
+          "id": "thalvorn_h7",
+          "model": "house03",
+          "x": -25.26,
+          "z": 7.93,
+          "rotationY": 3.12,
+          "height": 5.42,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 3.12
+        },
+        {
+          "id": "thalvorn_h8",
+          "model": "house04",
+          "x": -24.8,
+          "z": -10.31,
+          "rotationY": -0.02,
+          "height": 6.53,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": -0.02
+        },
+        {
+          "id": "thalvorn_h9",
+          "model": "house03",
+          "x": -9.47,
+          "z": -24.77,
+          "rotationY": 1.65,
+          "height": 5.73,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 1.65
+        },
+        {
+          "id": "thalvorn_h10",
+          "model": "house03",
+          "x": 7.53,
+          "z": -30.42,
+          "rotationY": -1.53,
+          "height": 5.47,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": -1.53
+        },
+        {
+          "id": "thalvorn_h11",
+          "model": "house04",
+          "x": 26.67,
+          "z": 24.51,
+          "rotationY": 2.66,
+          "height": 7.14,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 2.66
+        },
+        {
+          "id": "thalvorn_h12",
+          "model": "house03",
+          "x": 34.85,
+          "z": 8.89,
+          "rotationY": 3.1,
+          "height": 5.46,
+          "footprint": 3.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 3.1
+        }
+      ],
+      "outbuildings": [
+        {
+          "id": "thalvorn_out0",
+          "model": "trailer",
+          "x": -17.94,
+          "z": 7.7,
+          "rotationY": 4.76,
+          "height": 3.2,
+          "footprint": 2.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 4.76
+        },
+        {
+          "id": "thalvorn_out1",
+          "model": "shed",
+          "x": -12.88,
+          "z": -17.7,
+          "rotationY": 3.12,
+          "height": 3,
+          "footprint": 2.4,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 3.12
+        },
+        {
+          "id": "thalvorn_out2",
+          "model": "shed",
+          "x": 16.46,
+          "z": -12.83,
+          "rotationY": 1.61,
+          "height": 3,
+          "footprint": 2.4,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 1.61
+        },
+        {
+          "id": "thalvorn_out3",
+          "model": "trailer",
+          "x": 18.28,
+          "z": 15.9,
+          "rotationY": 1.62,
+          "height": 3.2,
+          "footprint": 2.6,
+          "villageId": "thalvorn",
+          "hamlet": false,
+          "front": 1.62
+        }
+      ]
+    },
+    {
+      "id": "mireval",
+      "name": "Mireval",
+      "x": 196,
+      "z": 136,
+      "radius": 30,
+      "hamlet": false,
+      "houses": [
+        {
+          "id": "mireval_h1",
+          "model": "house03",
+          "x": 183.43,
+          "z": 135.98,
+          "rotationY": 2.42,
+          "height": 6.17,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": 2.42
+        },
+        {
+          "id": "mireval_h2",
+          "model": "house04",
+          "x": 192.07,
+          "z": 123.89,
+          "rotationY": -0.72,
+          "height": 6.53,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": -0.72
+        },
+        {
+          "id": "mireval_h3",
+          "model": "house03",
+          "x": 209.73,
+          "z": 125.07,
+          "rotationY": -1.92,
+          "height": 5.9,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": -1.92
+        },
+        {
+          "id": "mireval_h4",
+          "model": "house03",
+          "x": 183.45,
+          "z": 113.32,
+          "rotationY": -0.72,
+          "height": 6.38,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": -0.72
+        },
+        {
+          "id": "mireval_h5",
+          "model": "house04",
+          "x": 218.94,
+          "z": 136.43,
+          "rotationY": -1.59,
+          "height": 6.74,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": -1.59
+        },
+        {
+          "id": "mireval_h6",
+          "model": "house03",
+          "x": 207.97,
+          "z": 153.47,
+          "rotationY": -2.54,
+          "height": 6.22,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": -2.54
+        },
+        {
+          "id": "mireval_h7",
+          "model": "house03",
+          "x": 188.71,
+          "z": 157.59,
+          "rotationY": 2.82,
+          "height": 5.59,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": 2.82
+        },
+        {
+          "id": "mireval_h8",
+          "model": "house04",
+          "x": 182.16,
+          "z": 147.59,
+          "rotationY": 2.27,
+          "height": 6.88,
+          "footprint": 3.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": 2.27
+        }
+      ],
+      "outbuildings": [
+        {
+          "id": "mireval_out0",
+          "model": "trailer",
+          "x": 175.48,
+          "z": 140.17,
+          "rotationY": 5.56,
+          "height": 3.2,
+          "footprint": 2.6,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": 5.56
+        },
+        {
+          "id": "mireval_out1",
+          "model": "shed",
+          "x": 195.2,
+          "z": 115.46,
+          "rotationY": 2.42,
+          "height": 3,
+          "footprint": 2.4,
+          "villageId": "mireval",
+          "hamlet": false,
+          "front": 2.42
+        }
+      ]
+    },
+    {
+      "id": "roches",
+      "name": "Roches-Noires",
+      "x": 64,
+      "z": -244,
+      "radius": 26,
+      "hamlet": false,
+      "houses": [
+        {
+          "id": "roches_h1",
+          "model": "house03",
+          "x": 73.92,
+          "z": -246.57,
+          "rotationY": -0.67,
+          "height": 6.29,
+          "footprint": 3.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": -0.67
+        },
+        {
+          "id": "roches_h2",
+          "model": "house04",
+          "x": 52.94,
+          "z": -242.3,
+          "rotationY": 0.97,
+          "height": 6.6,
+          "footprint": 3.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": 0.97
+        },
+        {
+          "id": "roches_h3",
+          "model": "house03",
+          "x": 64.15,
+          "z": -228.53,
+          "rotationY": -2.17,
+          "height": 5.91,
+          "footprint": 3.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": -2.17
+        },
+        {
+          "id": "roches_h4",
+          "model": "house03",
+          "x": 75.82,
+          "z": -224.7,
+          "rotationY": 2.48,
+          "height": 5.64,
+          "footprint": 3.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": 2.48
+        },
+        {
+          "id": "roches_h5",
+          "model": "house04",
+          "x": 54.83,
+          "z": -254.32,
+          "rotationY": 0.73,
+          "height": 6.6,
+          "footprint": 3.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": 0.73
+        },
+        {
+          "id": "roches_h6",
+          "model": "house03",
+          "x": 68.47,
+          "z": -257.37,
+          "rotationY": -0.32,
+          "height": 6.19,
+          "footprint": 3.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": -0.32
+        }
+      ],
+      "outbuildings": [
+        {
+          "id": "roches_out0",
+          "model": "trailer",
+          "x": 81.64,
+          "z": -251.17,
+          "rotationY": 2.47,
+          "height": 3.2,
+          "footprint": 2.6,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": 2.47
+        },
+        {
+          "id": "roches_out1",
+          "model": "shed",
+          "x": 44.2,
+          "z": -244.41,
+          "rotationY": 4.11,
+          "height": 3,
+          "footprint": 2.4,
+          "villageId": "roches",
+          "hamlet": false,
+          "front": 4.11
+        }
+      ]
+    }
+  ],
+  "groves": [
+    {
+      "x": 31.89,
+      "z": -363.08,
+      "radius": 14.59
+    },
+    {
+      "x": 59.28,
+      "z": -362.56,
+      "radius": 8.95
+    },
+    {
+      "x": 109.91,
+      "z": -355.55,
+      "radius": 17.9
+    },
+    {
+      "x": -29.45,
+      "z": -353.14,
+      "radius": 17.7
+    },
+    {
+      "x": -62.47,
+      "z": -344.55,
+      "radius": 11.74
+    },
+    {
+      "x": 170.08,
+      "z": -340.85,
+      "radius": 11.47
+    },
+    {
+      "x": 58.75,
+      "z": -335.48,
+      "radius": 14.69
+    },
+    {
+      "x": -99.17,
+      "z": -328.25,
+      "radius": 8.89
+    },
+    {
+      "x": -127.11,
+      "z": -326.99,
+      "radius": 11.88
+    },
+    {
+      "x": -183.83,
+      "z": -319.97,
+      "radius": 15.79
+    },
+    {
+      "x": -51.35,
+      "z": -316.15,
+      "radius": 11.77
+    },
+    {
+      "x": 115.91,
+      "z": -315.03,
+      "radius": 9.23
+    },
+    {
+      "x": -6.72,
+      "z": -309.71,
+      "radius": 9.59
+    },
+    {
+      "x": 158.26,
+      "z": -302.82,
+      "radius": 13.5
+    },
+    {
+      "x": 61.08,
+      "z": -302.63,
+      "radius": 12.5
+    },
+    {
+      "x": -151.74,
+      "z": -298.38,
+      "radius": 17.86
+    },
+    {
+      "x": -72.62,
+      "z": -295.68,
+      "radius": 11.82
+    },
+    {
+      "x": 20.19,
+      "z": -295.56,
+      "radius": 9.71
+    },
+    {
+      "x": -108.31,
+      "z": -293.67,
+      "radius": 15.47
+    },
+    {
+      "x": 220.61,
+      "z": -287.79,
+      "radius": 14.96
+    },
+    {
+      "x": 84.47,
+      "z": -286.2,
+      "radius": 11.42
+    },
+    {
+      "x": -31.07,
+      "z": -284.97,
+      "radius": 9.5
+    },
+    {
+      "x": 187.49,
+      "z": -280.32,
+      "radius": 12.57
+    },
+    {
+      "x": 43.46,
+      "z": -277.19,
+      "radius": 13.07
+    },
+    {
+      "x": -235.47,
+      "z": -275.83,
+      "radius": 12.51
+    },
+    {
+      "x": -188.91,
+      "z": -267.95,
+      "radius": 12.72
+    },
+    {
+      "x": 117.27,
+      "z": -265.56,
+      "radius": 13.52
+    },
+    {
+      "x": 6.07,
+      "z": -257.09,
+      "radius": 13.91
+    },
+    {
+      "x": 150.49,
+      "z": -255.64,
+      "radius": 13.83
+    },
+    {
+      "x": -109.59,
+      "z": -254.05,
+      "radius": 13.59
+    },
+    {
+      "x": -217.34,
+      "z": -253.56,
+      "radius": 11.22
+    },
+    {
+      "x": 183.87,
+      "z": -250.67,
+      "radius": 17.05
+    },
+    {
+      "x": -161.99,
+      "z": -246.97,
+      "radius": 12.03
+    },
+    {
+      "x": -72.72,
+      "z": -245.26,
+      "radius": 10.04
+    },
+    {
+      "x": 219.18,
+      "z": -241.58,
+      "radius": 9.73
+    },
+    {
+      "x": -24.83,
+      "z": -234.65,
+      "radius": 15.14
+    },
+    {
+      "x": -142.52,
+      "z": -223.66,
+      "radius": 11.62
+    },
+    {
+      "x": 130.6,
+      "z": -223.61,
+      "radius": 11.34
+    },
+    {
+      "x": 199.53,
+      "z": -217.25,
+      "radius": 15.12
+    },
+    {
+      "x": -220.18,
+      "z": -216.18,
+      "radius": 8.79
+    },
+    {
+      "x": 256.88,
+      "z": -214.62,
+      "radius": 12.1
+    },
+    {
+      "x": -70.08,
+      "z": -214.38,
+      "radius": 10.95
+    },
+    {
+      "x": -247.07,
+      "z": -213.41,
+      "radius": 8.73
+    },
+    {
+      "x": 21.82,
+      "z": -213.25,
+      "radius": 13.06
+    },
+    {
+      "x": -39.62,
+      "z": -207.1,
+      "radius": 13.42
+    },
+    {
+      "x": -288.83,
+      "z": -204.73,
+      "radius": 12.49
+    },
+    {
+      "x": -100.85,
+      "z": -201.7,
+      "radius": 8.41
+    },
+    {
+      "x": 47.68,
+      "z": -198.29,
+      "radius": 10.07
+    },
+    {
+      "x": 227.81,
+      "z": -194.95,
+      "radius": 16.75
+    },
+    {
+      "x": 90.7,
+      "z": -192.34,
+      "radius": 12.81
+    },
+    {
+      "x": -189.97,
+      "z": -188.69,
+      "radius": 15.7
+    },
+    {
+      "x": 183.98,
+      "z": -188.09,
+      "radius": 13.07
+    },
+    {
+      "x": -237.38,
+      "z": -186.2,
+      "radius": 17.56
+    },
+    {
+      "x": -149.03,
+      "z": -177.34,
+      "radius": 16.45
+    },
+    {
+      "x": -35.33,
+      "z": -174.47,
+      "radius": 8.18
+    },
+    {
+      "x": -327.16,
+      "z": -173.6,
+      "radius": 16.8
+    },
+    {
+      "x": 27.25,
+      "z": -172.99,
+      "radius": 11.31
+    },
+    {
+      "x": 261.27,
+      "z": -153.45,
+      "radius": 14.6
+    },
+    {
+      "x": 140.06,
+      "z": -152.1,
+      "radius": 15.54
+    },
+    {
+      "x": 202.92,
+      "z": -145.33,
+      "radius": 14.41
+    },
+    {
+      "x": -313.07,
+      "z": -142.5,
+      "radius": 16.38
+    },
+    {
+      "x": -74.54,
+      "z": -141.65,
+      "radius": 13.28
+    },
+    {
+      "x": -209.16,
+      "z": -140.14,
+      "radius": 12.1
+    },
+    {
+      "x": 290.17,
+      "z": -131.7,
+      "radius": 14.92
+    },
+    {
+      "x": -343.63,
+      "z": -126.14,
+      "radius": 10.81
+    },
+    {
+      "x": 107.42,
+      "z": -123.66,
+      "radius": 14.18
+    },
+    {
+      "x": -171.18,
+      "z": -123.01,
+      "radius": 8.18
+    },
+    {
+      "x": -249.84,
+      "z": -121.35,
+      "radius": 12.27
+    },
+    {
+      "x": -124.17,
+      "z": -120.83,
+      "radius": 14.71
+    },
+    {
+      "x": -297.72,
+      "z": -119.77,
+      "radius": 10.13
+    },
+    {
+      "x": 248.99,
+      "z": -116.81,
+      "radius": 13.91
+    },
+    {
+      "x": 79.89,
+      "z": -110.43,
+      "radius": 11.06
+    },
+    {
+      "x": 160.44,
+      "z": -108.61,
+      "radius": 17.86
+    },
+    {
+      "x": -40.89,
+      "z": -102.89,
+      "radius": 17.15
+    },
+    {
+      "x": 31.67,
+      "z": -102.21,
+      "radius": 8.19
+    },
+    {
+      "x": 216.08,
+      "z": -98.55,
+      "radius": 15.77
+    },
+    {
+      "x": 300.65,
+      "z": -88.82,
+      "radius": 9.95
+    },
+    {
+      "x": -113.56,
+      "z": -86.79,
+      "radius": 15.47
+    },
+    {
+      "x": -303.77,
+      "z": -86.3,
+      "radius": 14.99
+    },
+    {
+      "x": -155.25,
+      "z": -86.15,
+      "radius": 17.02
+    },
+    {
+      "x": 270.46,
+      "z": -85.4,
+      "radius": 13.65
+    },
+    {
+      "x": 364.28,
+      "z": -83.22,
+      "radius": 14.15
+    },
+    {
+      "x": -270.79,
+      "z": -82.07,
+      "radius": 15.62
+    },
+    {
+      "x": -81.55,
+      "z": -79.37,
+      "radius": 16.61
+    },
+    {
+      "x": 185.8,
+      "z": -75.74,
+      "radius": 8.44
+    },
+    {
+      "x": -208.36,
+      "z": -73.61,
+      "radius": 11.73
+    },
+    {
+      "x": -345.74,
+      "z": -68.5,
+      "radius": 11.36
+    },
+    {
+      "x": 138.18,
+      "z": -65,
+      "radius": 11.71
+    },
+    {
+      "x": -177.61,
+      "z": -64.83,
+      "radius": 14.65
+    },
+    {
+      "x": 335.41,
+      "z": -63.94,
+      "radius": 14.53
+    },
+    {
+      "x": -51.82,
+      "z": -62.58,
+      "radius": 11.02
+    },
+    {
+      "x": 35.76,
+      "z": -60.57,
+      "radius": 9.73
+    },
+    {
+      "x": 92.85,
+      "z": -51.33,
+      "radius": 17.53
+    },
+    {
+      "x": 253.64,
+      "z": -50.92,
+      "radius": 12.17
+    },
+    {
+      "x": -112.92,
+      "z": -45.51,
+      "radius": 12.38
+    },
+    {
+      "x": 54.71,
+      "z": -39.11,
+      "radius": 10.43
+    },
+    {
+      "x": 294.09,
+      "z": -37.99,
+      "radius": 14.18
+    },
+    {
+      "x": 140.72,
+      "z": -37.64,
+      "radius": 9.95
+    },
+    {
+      "x": -206.55,
+      "z": -34.12,
+      "radius": 11.81
+    },
+    {
+      "x": 201.46,
+      "z": -29.94,
+      "radius": 11.32
+    },
+    {
+      "x": -262.16,
+      "z": -29.2,
+      "radius": 14.67
+    },
+    {
+      "x": 331.5,
+      "z": -28.98,
+      "radius": 11.14
+    },
+    {
+      "x": 365.07,
+      "z": -26.87,
+      "radius": 16.79
+    },
+    {
+      "x": -131.8,
+      "z": -25.32,
+      "radius": 9.93
+    },
+    {
+      "x": -368.72,
+      "z": -23.46,
+      "radius": 10.71
+    },
+    {
+      "x": -54.43,
+      "z": -18.13,
+      "radius": 18.07
+    },
+    {
+      "x": 170.19,
+      "z": -13.49,
+      "radius": 17.33
+    },
+    {
+      "x": 51.18,
+      "z": -11.94,
+      "radius": 17.49
+    },
+    {
+      "x": 239.83,
+      "z": -11.9,
+      "radius": 17.46
+    },
+    {
+      "x": 92.78,
+      "z": -11.61,
+      "radius": 9.47
+    },
+    {
+      "x": 271.77,
+      "z": 1.64,
+      "radius": 16.6
+    },
+    {
+      "x": -210.56,
+      "z": 12.53,
+      "radius": 17.48
+    },
+    {
+      "x": -334.43,
+      "z": 15.08,
+      "radius": 16.91
+    },
+    {
+      "x": -261.15,
+      "z": 15.56,
+      "radius": 10.68
+    },
+    {
+      "x": -294.26,
+      "z": 19.07,
+      "radius": 12
+    },
+    {
+      "x": 125.49,
+      "z": 19.34,
+      "radius": 8.26
+    },
+    {
+      "x": 68.71,
+      "z": 19.65,
+      "radius": 9.23
+    },
+    {
+      "x": -64.47,
+      "z": 21.07,
+      "radius": 12.54
+    },
+    {
+      "x": 230.48,
+      "z": 22.17,
+      "radius": 9.7
+    },
+    {
+      "x": -172.69,
+      "z": 22.71,
+      "radius": 12.95
+    },
+    {
+      "x": -133.07,
+      "z": 26.59,
+      "radius": 14.58
+    },
+    {
+      "x": -102.12,
+      "z": 28.66,
+      "radius": 13.18
+    },
+    {
+      "x": 162.2,
+      "z": 31,
+      "radius": 14.86
+    },
+    {
+      "x": 104.21,
+      "z": 31.98,
+      "radius": 15.52
+    },
+    {
+      "x": -232.63,
+      "z": 43.84,
+      "radius": 17.89
+    },
+    {
+      "x": 40.12,
+      "z": 45.85,
+      "radius": 8.19
+    },
+    {
+      "x": 194.85,
+      "z": 47.37,
+      "radius": 10.86
+    },
+    {
+      "x": -296.25,
+      "z": 48.17,
+      "radius": 12.69
+    },
+    {
+      "x": 136.09,
+      "z": 48.47,
+      "radius": 10.1
+    },
+    {
+      "x": 356.48,
+      "z": 51.12,
+      "radius": 9.08
+    },
+    {
+      "x": 232.93,
+      "z": 56.46,
+      "radius": 13.51
+    },
+    {
+      "x": -140.65,
+      "z": 56.52,
+      "radius": 9.29
+    },
+    {
+      "x": -344.76,
+      "z": 61.6,
+      "radius": 15.64
+    },
+    {
+      "x": 76.22,
+      "z": 61.91,
+      "radius": 12.54
+    },
+    {
+      "x": 303.57,
+      "z": 62.07,
+      "radius": 17.34
+    },
+    {
+      "x": -12.31,
+      "z": 62.19,
+      "radius": 16.95
+    },
+    {
+      "x": 260.86,
+      "z": 63.39,
+      "radius": 10.69
+    },
+    {
+      "x": -171.67,
+      "z": 66.88,
+      "radius": 12.39
+    },
+    {
+      "x": -274.98,
+      "z": 67.81,
+      "radius": 12.75
+    },
+    {
+      "x": -99.24,
+      "z": 69.01,
+      "radius": 9.91
+    },
+    {
+      "x": 49.71,
+      "z": 74.35,
+      "radius": 8.26
+    },
+    {
+      "x": 100.12,
+      "z": 82.28,
+      "radius": 8.31
+    },
+    {
+      "x": -314.46,
+      "z": 85.84,
+      "radius": 16.95
+    },
+    {
+      "x": -197.56,
+      "z": 86.81,
+      "radius": 16.19
+    },
+    {
+      "x": 184.86,
+      "z": 86.82,
+      "radius": 9.87
+    },
+    {
+      "x": -143.8,
+      "z": 87.76,
+      "radius": 9.09
+    },
+    {
+      "x": 225.63,
+      "z": 88.21,
+      "radius": 11.1
+    },
+    {
+      "x": 342.16,
+      "z": 91.41,
+      "radius": 16.38
+    },
+    {
+      "x": -362.14,
+      "z": 92.15,
+      "radius": 13.31
+    },
+    {
+      "x": 30.41,
+      "z": 93.37,
+      "radius": 16.99
+    },
+    {
+      "x": -71.26,
+      "z": 95.33,
+      "radius": 13.12
+    },
+    {
+      "x": 259.48,
+      "z": 102.39,
+      "radius": 14.7
+    },
+    {
+      "x": -2.93,
+      "z": 106.21,
+      "radius": 16.23
+    },
+    {
+      "x": -121.32,
+      "z": 112.51,
+      "radius": 9.41
+    },
+    {
+      "x": -257.26,
+      "z": 117.7,
+      "radius": 17.14
+    },
+    {
+      "x": -305.06,
+      "z": 118.75,
+      "radius": 14.79
+    },
+    {
+      "x": 311.95,
+      "z": 121.01,
+      "radius": 12.18
+    },
+    {
+      "x": -193.2,
+      "z": 124.58,
+      "radius": 16.77
+    },
+    {
+      "x": 74.53,
+      "z": 130.13,
+      "radius": 8.91
+    },
+    {
+      "x": 359.35,
+      "z": 135.57,
+      "radius": 10.14
+    },
+    {
+      "x": 33.97,
+      "z": 136.15,
+      "radius": 9.3
+    },
+    {
+      "x": -83.62,
+      "z": 137.04,
+      "radius": 12.55
+    },
+    {
+      "x": -146.44,
+      "z": 140.41,
+      "radius": 9.31
+    },
+    {
+      "x": -7.25,
+      "z": 141.81,
+      "radius": 14.29
+    },
+    {
+      "x": -335.83,
+      "z": 141.93,
+      "radius": 15.18
+    },
+    {
+      "x": 283.17,
+      "z": 143.22,
+      "radius": 17.42
+    },
+    {
+      "x": 146.16,
+      "z": 147.23,
+      "radius": 15.45
+    },
+    {
+      "x": 254.41,
+      "z": 154.07,
+      "radius": 9.62
+    },
+    {
+      "x": 80.06,
+      "z": 154.62,
+      "radius": 16.65
+    },
+    {
+      "x": 337.54,
+      "z": 155.63,
+      "radius": 13.18
+    },
+    {
+      "x": -300.84,
+      "z": 157.94,
+      "radius": 17.18
+    },
+    {
+      "x": -27.38,
+      "z": 158.9,
+      "radius": 10.16
+    },
+    {
+      "x": 229.32,
+      "z": 161.09,
+      "radius": 9.68
+    },
+    {
+      "x": -100.04,
+      "z": 162.99,
+      "radius": 9.24
+    },
+    {
+      "x": -175.99,
+      "z": 163.62,
+      "radius": 13.74
+    },
+    {
+      "x": 44.13,
+      "z": 165.94,
+      "radius": 8.59
+    },
+    {
+      "x": 205.48,
+      "z": 174.02,
+      "radius": 11.05
+    },
+    {
+      "x": -64.02,
+      "z": 176.07,
+      "radius": 12.59
+    },
+    {
+      "x": -226.84,
+      "z": 177.79,
+      "radius": 9.77
+    },
+    {
+      "x": -138.78,
+      "z": 181.38,
+      "radius": 14.83
+    },
+    {
+      "x": 168.6,
+      "z": 182.22,
+      "radius": 13.05
+    },
+    {
+      "x": -280.08,
+      "z": 185.45,
+      "radius": 11.23
+    },
+    {
+      "x": 136.24,
+      "z": 187.74,
+      "radius": 9.47
+    },
+    {
+      "x": -35.95,
+      "z": 188.75,
+      "radius": 8.61
+    },
+    {
+      "x": 250.56,
+      "z": 190.15,
+      "radius": 12.6
+    },
+    {
+      "x": 85.21,
+      "z": 194.44,
+      "radius": 16.07
+    },
+    {
+      "x": -60.17,
+      "z": 203.43,
+      "radius": 8.99
+    },
+    {
+      "x": -3.28,
+      "z": 203.75,
+      "radius": 17.4
+    },
+    {
+      "x": -225.26,
+      "z": 204.85,
+      "radius": 11.13
+    },
+    {
+      "x": -136.12,
+      "z": 209.24,
+      "radius": 8.54
+    },
+    {
+      "x": -306.86,
+      "z": 215.07,
+      "radius": 16.85
+    },
+    {
+      "x": 229.03,
+      "z": 215.22,
+      "radius": 8.18
+    },
+    {
+      "x": 54.18,
+      "z": 217.56,
+      "radius": 16.82
+    },
+    {
+      "x": -198.01,
+      "z": 220.02,
+      "radius": 11.1
+    },
+    {
+      "x": 127.64,
+      "z": 222.9,
+      "radius": 13.4
+    },
+    {
+      "x": 22.38,
+      "z": 226.74,
+      "radius": 8.06
+    },
+    {
+      "x": -264.25,
+      "z": 227.98,
+      "radius": 16.43
+    },
+    {
+      "x": -53.22,
+      "z": 230.78,
+      "radius": 16.42
+    },
+    {
+      "x": 284.68,
+      "z": 231.74,
+      "radius": 16.57
+    },
+    {
+      "x": 245.97,
+      "z": 237.4,
+      "radius": 14.71
+    },
+    {
+      "x": -223.69,
+      "z": 241.34,
+      "radius": 9.51
+    },
+    {
+      "x": -9.4,
+      "z": 243.88,
+      "radius": 13.47
+    },
+    {
+      "x": 145.38,
+      "z": 248.28,
+      "radius": 14.63
+    },
+    {
+      "x": 195.31,
+      "z": 250,
+      "radius": 8.26
+    },
+    {
+      "x": 94.16,
+      "z": 252.36,
+      "radius": 14.17
+    },
+    {
+      "x": -105.69,
+      "z": 255.49,
+      "radius": 8.1
+    },
+    {
+      "x": 55.57,
+      "z": 259.22,
+      "radius": 13.36
+    },
+    {
+      "x": -73.37,
+      "z": 262.93,
+      "radius": 15.04
+    },
+    {
+      "x": 220.81,
+      "z": 266.56,
+      "radius": 10.35
+    },
+    {
+      "x": -35.28,
+      "z": 272.61,
+      "radius": 14.48
+    },
+    {
+      "x": -204.48,
+      "z": 274.79,
+      "radius": 16.45
+    },
+    {
+      "x": -240.19,
+      "z": 275.45,
+      "radius": 14.84
+    },
+    {
+      "x": 125.98,
+      "z": 281.61,
+      "radius": 9.41
+    },
+    {
+      "x": 175.48,
+      "z": 281.86,
+      "radius": 12.08
+    },
+    {
+      "x": 88.92,
+      "z": 284.66,
+      "radius": 10.38
+    },
+    {
+      "x": -159.96,
+      "z": 285.1,
+      "radius": 9.46
+    },
+    {
+      "x": 58.48,
+      "z": 292.23,
+      "radius": 12.8
+    },
+    {
+      "x": -99.4,
+      "z": 293.27,
+      "radius": 14.77
+    },
+    {
+      "x": -0.39,
+      "z": 295.29,
+      "radius": 10.43
+    },
+    {
+      "x": -57.2,
+      "z": 295.78,
+      "radius": 9.37
+    },
+    {
+      "x": -204.49,
+      "z": 308.76,
+      "radius": 9.86
+    },
+    {
+      "x": 137.36,
+      "z": 314.62,
+      "radius": 8.95
+    },
+    {
+      "x": 37.75,
+      "z": 315.52,
+      "radius": 11.33
+    },
+    {
+      "x": 66.05,
+      "z": 323.1,
+      "radius": 15.71
+    },
+    {
+      "x": -146.67,
+      "z": 325.54,
+      "radius": 9.65
+    },
+    {
+      "x": -184.83,
+      "z": 326.75,
+      "radius": 17.11
+    },
+    {
+      "x": -17.3,
+      "z": 330.24,
+      "radius": 10.45
+    },
+    {
+      "x": -99.86,
+      "z": 334.92,
+      "radius": 11.08
+    },
+    {
+      "x": 8.98,
+      "z": 335.51,
+      "radius": 16.35
+    },
+    {
+      "x": -67.03,
+      "z": 341.28,
+      "radius": 9.71
+    },
+    {
+      "x": -15.57,
+      "z": 363.22,
+      "radius": 12.89
+    },
+    {
+      "x": -45.4,
+      "z": 368.91,
+      "radius": 11.42
+    }
+  ],
+  "props": [
+    {
+      "id": "barrel",
+      "x": -18.1,
+      "z": 4.3,
+      "rotationY": 5.38,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": -9.48,
+      "z": -17.63,
+      "rotationY": 5.12,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 16.6,
+      "z": -9.43,
+      "rotationY": 0.6,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 18.45,
+      "z": 19.29,
+      "rotationY": 5.74,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": -4.91,
+      "z": 7.86,
+      "rotationY": 3.19,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": -4.94,
+      "z": 13.36,
+      "rotationY": 0.44,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": -3.89,
+      "z": 13.91,
+      "rotationY": 1.32,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": -5.04,
+      "z": 11.47,
+      "rotationY": 3.8,
+      "radius": 0.4
+    },
+    {
+      "id": "tyre",
+      "x": -4.93,
+      "z": 11.66,
+      "rotationY": 0.7,
+      "radius": 0.4
+    },
+    {
+      "id": "barrel",
+      "x": 3.52,
+      "z": -18.6,
+      "rotationY": 2.91,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 3.59,
+      "z": -16.7,
+      "rotationY": 0.13,
+      "radius": 0.4
+    },
+    {
+      "id": "crateOld",
+      "x": 12.53,
+      "z": -13.67,
+      "rotationY": -1.13,
+      "radius": 0.6,
+      "box": true,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": 5.58,
+      "z": 22.15,
+      "rotationY": 0.05,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": -3.74,
+      "z": 28.32,
+      "rotationY": 1.83,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": -2.69,
+      "z": 28.87,
+      "rotationY": 0.1,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": -3.84,
+      "z": 26.43,
+      "rotationY": 5.59,
+      "radius": 0.4
+    },
+    {
+      "id": "car",
+      "x": -27.56,
+      "z": 3.28,
+      "rotationY": 4.69,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": -22.07,
+      "z": 3.7,
+      "rotationY": 2.01,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": -23.97,
+      "z": 3.66,
+      "rotationY": 2.9,
+      "radius": 0.4
+    },
+    {
+      "id": "crateOld",
+      "x": -22.51,
+      "z": -14.77,
+      "rotationY": 0.38,
+      "radius": 0.6,
+      "box": true,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": 3.03,
+      "z": -27.83,
+      "rotationY": 0.04,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 31.41,
+      "z": 22.13,
+      "rotationY": 3.63,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 29.73,
+      "z": 21.25,
+      "rotationY": 2.26,
+      "radius": 0.4
+    },
+    {
+      "id": "barrier",
+      "x": -2,
+      "z": 10.11,
+      "rotationY": 0.05,
+      "radius": 0.8,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrier",
+      "x": -10.01,
+      "z": -2.75,
+      "rotationY": 1.55,
+      "radius": 0.8,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 172.93,
+      "z": 137.93,
+      "rotationY": 4.26,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 197.76,
+      "z": 117.71,
+      "rotationY": 5.45,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": 184.67,
+      "z": 130.94,
+      "rotationY": 3.99,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 188.6,
+      "z": 134.8,
+      "rotationY": 3.74,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 189.65,
+      "z": 135.35,
+      "rotationY": 3.64,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 187.17,
+      "z": 133.54,
+      "rotationY": 5.66,
+      "radius": 0.4
+    },
+    {
+      "id": "tyre",
+      "x": 187.39,
+      "z": 133.6,
+      "rotationY": 0.7,
+      "radius": 0.4
+    },
+    {
+      "id": "barrel",
+      "x": 206.75,
+      "z": 120.69,
+      "rotationY": 4.91,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 206.1,
+      "z": 122.47,
+      "rotationY": 2.66,
+      "radius": 0.4
+    },
+    {
+      "id": "crateOld",
+      "x": 213.21,
+      "z": 128.68,
+      "rotationY": -1.52,
+      "radius": 0.6,
+      "box": true,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": 182.22,
+      "z": 118.36,
+      "rotationY": 0.85,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 214.7,
+      "z": 133.25,
+      "rotationY": 1.83,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 215.75,
+      "z": 133.8,
+      "rotationY": 0,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 214.66,
+      "z": 135.15,
+      "rotationY": 1.05,
+      "radius": 0.4
+    },
+    {
+      "id": "car",
+      "x": 187.89,
+      "z": 152.47,
+      "rotationY": 4.39,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 193.01,
+      "z": 154.49,
+      "rotationY": 4.88,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 191.21,
+      "z": 153.89,
+      "rotationY": 5.22,
+      "radius": 0.4
+    },
+    {
+      "id": "crateOld",
+      "x": 177.3,
+      "z": 148.8,
+      "rotationY": 2.67,
+      "radius": 0.6,
+      "box": true,
+      "shadow": true
+    },
+    {
+      "id": "barrier",
+      "x": 187.61,
+      "z": 131.25,
+      "rotationY": 0.85,
+      "radius": 0.8,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrier",
+      "x": 189.11,
+      "z": 127.24,
+      "rotationY": 0.85,
+      "radius": 0.8,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 84.31,
+      "z": -249.06,
+      "rotationY": 0.72,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 46.12,
+      "z": -247.21,
+      "rotationY": 1.93,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": 72.94,
+      "z": -241.47,
+      "rotationY": 0.9,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 68.82,
+      "z": -245.12,
+      "rotationY": 0.84,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 69.87,
+      "z": -244.57,
+      "rotationY": 1.55,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 70.31,
+      "z": -243.94,
+      "rotationY": 4.03,
+      "radius": 0.4
+    },
+    {
+      "id": "tyre",
+      "x": 70.09,
+      "z": -243.99,
+      "rotationY": 0.7,
+      "radius": 0.4
+    },
+    {
+      "id": "barrel",
+      "x": 62.35,
+      "z": -233.52,
+      "rotationY": 4.97,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 61.28,
+      "z": -231.95,
+      "rotationY": 0.56,
+      "radius": 0.4
+    },
+    {
+      "id": "crateOld",
+      "x": 66.63,
+      "z": -224.18,
+      "rotationY": -1.77,
+      "radius": 0.6,
+      "box": true,
+      "shadow": true
+    },
+    {
+      "id": "car",
+      "x": 76.75,
+      "z": -229.8,
+      "rotationY": 4.05,
+      "radius": 1.35,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 55.39,
+      "z": -249.05,
+      "rotationY": 3.16,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "barrel",
+      "x": 56.44,
+      "z": -248.5,
+      "rotationY": 2.55,
+      "radius": 0.35,
+      "shadow": true
+    },
+    {
+      "id": "tyre",
+      "x": 56.8,
+      "z": -250.32,
+      "rotationY": 6.25,
+      "radius": 0.4
+    },
+    {
+      "id": "barrier",
+      "x": 67.8,
+      "z": -238.79,
+      "rotationY": -2.24,
+      "radius": 0.8,
+      "split": true,
+      "shadow": true
+    },
+    {
+      "id": "barrier",
+      "x": 61.3,
+      "z": -236.55,
+      "rotationY": 2.54,
+      "radius": 0.8,
+      "split": true,
+      "shadow": true
+    }
+  ]
+}

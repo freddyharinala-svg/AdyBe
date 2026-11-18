@@ -1,0 +1,12 @@
+{
+    "items": [
+        { "id": "skin_recruit", "name": "Recrue", "description": "Tenue de base du combattant ADY.", "category": "skin", "price": 0, "rarity": "common", "preview": "assets/previews/skin_recruit.jpg" },
+        { "id": "skin_jungle", "name": "Ranger Jungle", "description": "Tenue vert forêt pour la carte Forest.", "category": "skin", "price": 1000, "rarity": "uncommon", "preview": "assets/previews/skin_jungle.jpg" },
+        { "id": "skin_ghost", "name": "Spectre Urbain", "description": "Camouflage gris pour les zones bâties.", "category": "skin", "price": 1200, "rarity": "rare", "preview": "assets/previews/skin_ghost.jpg" },
+        { "id": "skin_phoenix", "name": "Phénix", "description": "Combinaison incendiaire, visible de loin.", "category": "skin", "price": 2400, "rarity": "epic", "preview": "assets/previews/skin_phoenix.jpg" },
+        { "id": "char_dying", "name": "Personnage — Survivant", "description": "Vétéran blessé, apparence réaliste.", "category": "character", "price": 2500, "rarity": "rare", "preview": "assets/previews/char_dying.jpg" },
+        { "id": "char_dying1", "name": "Personnage — Blessé", "description": "Combattant affaibli aux traits détaillés.", "category": "character", "price": 3200, "rarity": "epic", "preview": "assets/previews/char_dying1.jpg" },
+        { "id": "char_archer", "name": "Personnage — Erika Archer", "description": "Archère agile et silencieuse, tenue de chasseuse.", "category": "character", "price": 3400, "rarity": "rare", "preview": "assets/previews/char_archer.jpg" },
+        { "id": "char_kaya", "name": "Personnage — Kaya", "description": "Disciple loyal et redoutable de l'archère.", "category": "character", "price": 2000, "rarity": "uncommon", "preview": "assets/previews/char_kaya.jpg" }
+    ]
+}

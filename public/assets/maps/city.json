@@ -1,0 +1,19 @@
+{
+  "id": "city",
+  "name": "Néo-Bastion",
+  "description": "Blocs urbains, rues ouvertes et toits praticables. Combat vertical.",
+  "worldSize": 100,
+  "maxHeight": 30,
+  "playerCount": 10,
+  "spawn": {
+    "x": 0,
+    "y": 150,
+    "z": -45,
+    "angle": 0
+  },
+  "lootDensity": 0.85,
+  "vehicleDensity": 0.5,
+  "minimap": "public/assets/maps/city-minimap.png",
+  "heightmap": null,
+  "biome": "urban"
+}

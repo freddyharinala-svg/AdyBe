@@ -1,0 +1,19 @@
+{
+  "id": "forest",
+  "name": "Vallée des Pins",
+  "description": "Forêt dense, collines et ruines. Idéale pour les embuscades.",
+  "worldSize": 200,
+  "maxHeight": 30,
+  "playerCount": 10,
+  "spawn": {
+    "x": 0,
+    "y": 150,
+    "z": -90,
+    "angle": 0
+  },
+  "lootDensity": 0.72,
+  "vehicleDensity": 0.35,
+  "minimap": "public/assets/maps/forest-minimap.png",
+  "heightmap": "public/assets/maps/forest-heightmap.png",
+  "biome": "forest"
+}

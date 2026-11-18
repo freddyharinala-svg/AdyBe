@@ -1,0 +1,13 @@
+{
+  "name": "adybe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adybe - battle royale PlayCanvas leger pour web et mobile, mode multijoueur",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

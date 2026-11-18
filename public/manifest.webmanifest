@@ -1,0 +1,15 @@
+{
+  "name": "Adybe — Dernier combattant debout",
+  "short_name": "Adybe",
+  "description": "Battle royale léger sur PlayCanvas, jouable sur web et mobile.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d1014",
+  "theme_color": "#0d1014",
+  "icons": [
+    { "src": "assets/ui/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/ui/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
