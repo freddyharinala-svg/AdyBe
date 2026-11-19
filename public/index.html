@@ -21,7 +21,7 @@
     <div class="menu-backdrop"></div>
     <div class="menu-wrap">
       <header class="brand">
-        <img class="brand-logo" src="assets/ui/logo.png" alt="Adybe">
+        <img class="brand-logo" src="assets/ui/logo-emblem.svg" alt="Adybe">
         <div>
           <h1>ADYBE</h1>
           <p>DERNIER COMBATTANT DEBOUT</p>
@@ -30,6 +30,15 @@
 
       <div class="menu-grid">
         <div class="panel panel-main">
+          <div class="user-strip">
+            <div id="menu-avatar" class="user-avatar">?</div>
+            <div class="user-meta">
+              <strong id="menu-user">Invité</strong>
+              <span id="menu-meta">Connecte-toi pour jouer en ligne</span>
+            </div>
+            <div class="credit-chip"><img src="assets/ui/coin.png" alt="Crédits"><span id="menu-credits">—</span></div>
+          </div>
+
           <label class="field">
             <span>NOM DU JOUEUR</span>
             <input id="input-name" type="text" maxlength="16" value="Combattant" autocomplete="off" spellcheck="false">
@@ -71,7 +80,20 @@
           </div>
 
           <button id="btn-play" class="btn btn-primary btn-play">LANCER LE MATCH</button>
+
+          <div class="menu-nav">
+            <button id="btn-auth" class="btn btn-nav">SE CONNECTER / S'INSCRIRE</button>
+            <button id="btn-shop" class="btn btn-nav">BOUTIQUE</button>
+            <button id="btn-profile" class="btn btn-nav">PROFIL</button>
+            <button id="btn-ranking" class="btn btn-nav">CLASSEMENT</button>
+            <button id="btn-rooms" class="btn btn-nav">SALLES</button>
+            <button id="btn-settings" class="btn btn-nav">RÉGLAGES</button>
+            <button id="btn-admin" class="btn btn-nav hidden">ADMINISTRATION</button>
+            <button id="btn-logout" class="btn btn-danger hidden">SE DÉCONNECTER</button>
+          </div>
+
           <div class="menu-status">
+            <span id="api-status" class="badge badge-off">API…</span>
             <span id="net-status" class="badge badge-off">Serveur…</span>
             <span id="fps-status" class="badge">—</span>
             <span id="version-status" class="badge">v1.0</span>
@@ -93,6 +115,162 @@
           </ul>
           <p class="muted small">Sur mobile : stick gauche, glisser à droite pour viser, boutons d’action.</p>
         </aside>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-auth" class="screen page-screen bg-login">
+    <div class="page-wrap narrow">
+      <div class="page-head">
+        <img src="assets/ui/logo-emblem.svg" alt="" class="page-emblem">
+        <div><h2>MYADY</h2><p>Compte combattant ADY</p></div>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div class="panel page-panel">
+        <div class="tabs">
+          <button id="tab-login" class="chip selected">CONNEXION</button>
+          <button id="tab-register" class="chip">INSCRIPTION</button>
+        </div>
+        <div id="auth-login-panel">
+          <label class="field"><span>IDENTIFIANT</span><input id="auth-login-username" type="text" autocomplete="username" spellcheck="false"></label>
+          <label class="field"><span>MOT DE PASSE</span><input id="auth-login-password" type="password" autocomplete="current-password"></label>
+          <button id="btn-login" class="btn btn-primary">SE CONNECTER</button>
+        </div>
+        <div id="auth-reg-panel" class="hidden">
+          <label class="field"><span>IDENTIFIANT</span><input id="auth-reg-username" type="text" autocomplete="username" spellcheck="false"></label>
+          <label class="field"><span>PSEUDO AFFICHÉ</span><input id="auth-reg-display" type="text" autocomplete="nickname" spellcheck="false"></label>
+          <label class="field"><span>E-MAIL (FACULTATIF)</span><input id="auth-reg-email" type="email" autocomplete="email" spellcheck="false"></label>
+          <label class="field"><span>MOT DE PASSE</span><input id="auth-reg-password" type="password" autocomplete="new-password"></label>
+          <button id="btn-register" class="btn btn-primary">CRÉER MON COMPTE</button>
+        </div>
+        <p id="auth-message" class="form-message muted"></p>
+        <p class="muted small">Identifiant 3–20 caractères · mot de passe 6 caractères minimum.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-shop" class="screen page-screen bg-connected-1">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div><h2>BOUTIQUE</h2><p>Articles réellement utilisables en partie.</p></div>
+        <div class="credit-chip credit-chip-lg"><img src="assets/ui/coin.png" alt="Crédits"><span id="shop-credits">—</span></div>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div class="filter-row">
+        <button id="shop-filter-all" class="chip selected">TOUT</button>
+        <button id="shop-filter-skin" class="chip">SKINS</button>
+        <button id="shop-filter-character" class="chip">PERSONNAGES</button>
+      </div>
+      <div id="shop-grid" class="card-grid"></div>
+      <p id="shop-message" class="form-message muted"></p>
+    </div>
+  </section>
+
+  <section id="screen-profile" class="screen page-screen bg-connected-2">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div><h2>PROFIL</h2><p>Progression, statistiques et inventaire.</p></div>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div id="profile-content"></div>
+    </div>
+  </section>
+
+  <section id="screen-ranking" class="screen page-screen bg-connected-3">
+    <div class="page-wrap">
+      <div class="page-head">
+        <img src="assets/ui/trophy.png" alt="" class="page-emblem">
+        <div><h2>CLASSEMENT</h2><p>Les 30 meilleurs combattants de l’Île.</p></div>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div class="panel page-panel"><div id="ranking-list" class="ranking-list"></div></div>
+    </div>
+  </section>
+
+  <section id="screen-settings" class="screen page-screen bg-login">
+    <div class="page-wrap narrow">
+      <div class="page-head">
+        <div><h2>RÉGLAGES</h2><p>Audio, sensibilité et affichage.</p></div>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div class="panel page-panel">
+        <h3 class="section-label">AUDIO</h3>
+        <label class="set-row"><span>Volume général</span><input id="set-master" type="range" min="0" max="100" step="1"><em id="set-master-value">80</em></label>
+        <label class="set-row"><span>Musique</span><input id="set-music" type="range" min="0" max="100" step="1"><em id="set-music-value">50</em></label>
+        <label class="set-row"><span>Effets sonores</span><input id="set-sfx" type="range" min="0" max="100" step="1"><em id="set-sfx-value">90</em></label>
+        <label class="toggle"><input id="chk-audio" type="checkbox" checked> Son activé</label>
+
+        <h3 class="section-label">SOURIS</h3>
+        <label class="set-row"><span>Sensibilité</span><input id="set-sensitivity" type="range" min="1" max="12" step="0.5"><em id="set-sensitivity-value">6</em></label>
+
+        <h3 class="section-label">CAMÉRA / QUALITÉ</h3>
+        <div class="field-row">
+          <label class="field"><span>CAMÉRA</span><select id="set-camera"><option value="tps">Épaule (TPS)</option><option value="fps">Première personne</option></select></label>
+          <label class="field"><span>QUALITÉ</span><select id="set-quality"><option value="auto">Auto</option><option value="low">Basse</option><option value="medium">Moyenne</option><option value="high">Haute</option></select></label>
+        </div>
+        <label class="toggle"><input id="chk-fullscreen" type="checkbox"> Plein écran</label>
+
+        <div id="settings-info" class="info-box"></div>
+        <button id="btn-reset-settings" class="btn btn-danger">RÉINITIALISER LES RÉGLAGES</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-admin" class="screen page-screen bg-connected-1">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div><h2>ADMINISTRATION</h2><p>Stats serveur et paiements Mobile Money.</p></div>
+        <button id="btn-admin-refresh" class="btn btn-back">ACTUALISER</button>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div id="admin-stats" class="stat-grid"></div>
+      <div class="panel page-panel"><h3 class="section-label">PAIEMENTS EN ATTENTE</h3><div id="admin-payments"></div></div>
+    </div>
+  </section>
+
+  <section id="screen-rooms" class="screen page-screen bg-connected-2">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div><h2>SALLES</h2><p>Rejoins une partie privée ou crée la tienne.</p></div>
+        <button class="btn btn-back" data-back>RETOUR</button>
+      </div>
+      <div class="panel page-panel room-form">
+        <div class="field-row">
+          <label class="field"><span>CLÉ PRIVÉE</span><input id="room-key" type="text" placeholder="MyAdy-XXXXX" autocomplete="off" spellcheck="false"></label>
+          <label class="field"><span>CARTE</span><select id="room-map"><option value="forest">Forêt de Thalvorn</option><option value="city">Ville d’Ady</option></select></label>
+        </div>
+        <div class="field-row four">
+          <label class="field"><span>MODE</span><select id="room-mode"><option value="solo">Solo</option><option value="training">Entraînement</option></select></label>
+          <label class="field"><span>PRIX (CR)</span><input id="room-price" type="number" min="0" max="100000" value="0"></label>
+          <label class="field"><span>DURÉE (S)</span><select id="room-duration"><option value="180">180</option><option value="300" selected>300</option><option value="480">480</option></select></label>
+          <label class="field"><span>JOUEURS MAX</span><input id="room-players" type="number" min="2" max="10" value="5"></label>
+        </div>
+        <div class="dialog-actions">
+          <button id="btn-room-join-key" class="btn btn-nav">REJOINDRE AVEC LA CLÉ</button>
+          <button id="btn-room-create" class="btn btn-primary">CRÉER UNE SALLE</button>
+        </div>
+      </div>
+      <div id="rooms-list" class="card-grid rooms-grid"></div>
+      <p id="rooms-message" class="form-message muted"></p>
+    </div>
+  </section>
+
+  <section id="screen-lobby" class="screen page-screen bg-connected-1">
+    <div class="page-wrap narrow">
+      <div class="page-head">
+        <div><h2>SALLE D’ATTENTE</h2><p id="lobby-room-info"></p></div>
+        <button id="btn-leave-room" class="btn btn-danger btn-back">QUITTER</button>
+      </div>
+      <div class="panel page-panel lobby-panel">
+        <div class="lobby-top">
+          <div><span class="section-label">CODE D’INVITATION</span><strong id="lobby-code">—</strong></div>
+          <div class="lobby-count"><span class="section-label">DÉPART</span><strong id="lobby-countdown">—</strong></div>
+          <div><span class="section-label">ÉTAT</span><strong id="lobby-ready">EN ATTENTE</strong></div>
+        </div>
+        <div id="lobby-players" class="lobby-players"></div>
+        <div id="lobby-chat-log" class="lobby-chat"></div>
+        <input id="lobby-chat-input" type="text" maxlength="120" placeholder="Message…" autocomplete="off">
+        <button id="btn-ready" class="btn btn-primary">PRÊT</button>
       </div>
     </div>
   </section>
@@ -175,6 +353,14 @@
       <div class="dialog-actions">
         <button id="btn-replay" class="btn btn-primary">REJOUER</button>
         <button id="btn-menu" class="btn">MENU</button>
+      </div>
+      <div id="results-replay-vote" class="replay-vote hidden">
+        <p id="replay-vote-info" class="muted">Voulez-vous rejouer cette partie ?</p>
+        <div class="dialog-actions">
+          <button id="btn-replay-accept" class="btn btn-primary">OUI, REJOUER</button>
+          <button id="btn-replay-reject" class="btn btn-danger">NON, TERMINER</button>
+        </div>
+        <button id="btn-requeue" class="btn btn-nav">RELANCER UN VOTE DE REJEU</button>
       </div>
     </div>
   </section>

@@ -8,6 +8,12 @@ export class Assets {
     this.music = null;
     this.musicName = '';
     this.enabled = true;
+    this.anisotropy = 1;
+  }
+
+  setQuality(quality) {
+    const maximum = this.app.graphicsDevice.maxAnisotropy || 1;
+    this.anisotropy = Math.max(1, Math.min(quality.anisotropy || 1, maximum));
   }
 
   async json(path) {
@@ -16,35 +22,20 @@ export class Assets {
     return response.json();
   }
 
-  texture(path, repeat) {
-    const scale = repeat || 1;
-    const key = `${path}|${scale}`;
-    if (this.textures.has(key)) return this.textures.get(key);
+  texture(path) {
+    if (this.textures.has(path)) return this.textures.get(path);
     const texture = new pc.Texture(this.app.graphicsDevice, {
       addressU: pc.ADDRESS_REPEAT,
       addressV: pc.ADDRESS_REPEAT,
       minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR,
       magFilter: pc.FILTER_LINEAR,
       mipmaps: true,
-      anisotropy: 1,
+      anisotropy: this.anisotropy,
     });
     const image = new Image();
-    image.addEventListener('load', () => {
-      texture.setSource(image);
-      if (scale !== 1) {
-        const source = image;
-        const canvas = document.createElement('canvas');
-        canvas.width = source.width * scale;
-        canvas.height = source.height * scale;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-          texture.setSource(canvas);
-        }
-      }
-    }, { once: true });
+    image.addEventListener('load', () => texture.setSource(image), { once: true });
     image.src = path;
-    this.textures.set(key, texture);
+    this.textures.set(path, texture);
     return texture;
   }
 

@@ -1,6 +1,19 @@
-import { MAPS, MODES, clamp } from './config.js';
+import { MAPS, MODES, MAP_SIZE, clamp, VERSION } from './config.js';
+import { Settings } from './settings.js';
+import { Session } from './session.js';
 
 const byId = (id) => document.getElementById(id);
+const setText = (id, text) => {
+  const node = byId(id);
+  if (node) node.textContent = text == null ? '' : String(text);
+};
+const escapeHtml = (value) => String(value == null ? '' : value)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const on = (id, event, handler) => {
+  const node = byId(id);
+  if (node) node.addEventListener(event, handler);
+};
 
 export class UI {
   constructor(handlers) {
@@ -19,6 +32,11 @@ export class UI {
     this.feedLines = [];
     this.bannerTimer = 0;
     this.hitTimer = 0;
+    this.shopItems = [];
+    this.shopState = {};
+    this.shopFilter = 'all';
+    this.lobbyChat = [];
+    this.authTab = 'login';
     this.isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
     this.bind();
     if (this.isTouch) document.body.classList.add('touch');
@@ -66,7 +84,164 @@ export class UI {
     byId('btn-pause-mobile').addEventListener('click', () => this.handlers.onPause && this.handlers.onPause());
     byId('chk-sound').addEventListener('change', (event) => this.handlers.onSoundToggle && this.handlers.onSoundToggle(event.target.checked));
 
+    this.bindAccount();
     this.bindTouch();
+  }
+
+  bindAccount() {
+    document.querySelectorAll('[data-back]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.handlers.onSound && this.handlers.onSound('ui/click');
+        this.handlers.onMenu && this.handlers.onMenu();
+        this.screen('menu');
+      });
+    });
+
+    const nav = {
+      'btn-auth': 'onAuth', 'btn-shop': 'onShop', 'btn-profile': 'onProfile',
+      'btn-ranking': 'onRanking', 'btn-settings': 'onSettings',
+      'btn-rooms': 'onRooms', 'btn-admin': 'onAdmin', 'btn-logout': 'onLogout',
+    };
+    Object.keys(nav).forEach((id) => {
+      on(id, 'click', () => {
+        this.handlers.onSound && this.handlers.onSound('ui/click');
+        const handler = this.handlers[nav[id]];
+        if (handler) handler();
+      });
+    });
+
+    on('tab-login', 'click', () => this.setAuthTab('login'));
+    on('tab-register', 'click', () => this.setAuthTab('register'));
+    on('btn-login', 'click', () => {
+      const username = (byId('auth-login-username').value || '').trim();
+      const password = byId('auth-login-password').value || '';
+      if (!username || !password) {
+        this.setAuthMessage('Identifiant et mot de passe requis.', true);
+        return;
+      }
+      if (this.handlers.onLogin) this.handlers.onLogin({ username, password });
+    });
+    on('btn-register', 'click', () => {
+      const username = (byId('auth-reg-username').value || '').trim();
+      const displayName = (byId('auth-reg-display').value || '').trim();
+      const email = (byId('auth-reg-email').value || '').trim();
+      const password = byId('auth-reg-password').value || '';
+      if (username.length < 3) {
+        this.setAuthMessage("L'identifiant doit faire au moins 3 caractères.", true);
+        return;
+      }
+      if (password.length < 6) {
+        this.setAuthMessage('Le mot de passe doit contenir au moins 6 caractères.', true);
+        return;
+      }
+      if (this.handlers.onRegister) this.handlers.onRegister({ username, displayName, email, password });
+    });
+    on('auth-login-password', 'keydown', (event) => { if (event.key === 'Enter') byId('btn-login').click(); });
+    on('auth-reg-password', 'keydown', (event) => { if (event.key === 'Enter') byId('btn-register').click(); });
+
+    ['all', 'skin', 'character'].forEach((filter) => {
+      on(`shop-filter-${filter}`, 'click', () => this.setShopFilter(filter));
+    });
+    on('shop-grid', 'click', (event) => {
+      const button = event.target.closest('[data-shop-action]');
+      if (!button) return;
+      const itemId = button.dataset.item;
+      if (button.dataset.shopAction === 'equip' && this.handlers.onEquip) this.handlers.onEquip(itemId);
+      if (button.dataset.shopAction === 'purchase' && this.handlers.onPurchase) this.handlers.onPurchase(itemId);
+    });
+    on('profile-content', 'click', (event) => {
+      const button = event.target.closest('[data-equip]');
+      if (button && this.handlers.onEquip) this.handlers.onEquip(button.dataset.equip);
+    });
+
+    const volume = (id, key) => on(id, 'input', (event) => {
+      const value = Number(event.target.value) / 100;
+      Settings.set({ [key]: value });
+      Settings.apply();
+      setText(`${id}-value`, Math.round(value * 100));
+      if (this.handlers.onSettings) this.handlers.onSettings(Settings.get());
+    });
+    volume('set-master', 'master');
+    volume('set-music', 'music');
+    volume('set-sfx', 'sfx');
+    const updateSensitivity = (event) => {
+      Settings.set({ sensitivity: Number(event.target.value) });
+      Settings.apply();
+      setText('set-sensitivity-value', event.target.value);
+      if (this.handlers.onSettings) this.handlers.onSettings(Settings.get());
+    };
+    on('set-sensitivity', 'input', updateSensitivity);
+    on('set-sensitivity', 'change', updateSensitivity);
+    on('set-camera', 'change', (event) => {
+      Settings.set({ camera: event.target.value });
+      Settings.apply();
+      if (this.handlers.onSettings) this.handlers.onSettings(Settings.get());
+    });
+    on('set-quality', 'change', (event) => {
+      Settings.set({ quality: event.target.value });
+      Settings.apply();
+      if (this.handlers.onSettings) this.handlers.onSettings(Settings.get());
+    });
+    on('chk-audio', 'change', (event) => {
+      Settings.set({ sound: event.target.checked });
+      Settings.apply();
+      if (this.handlers.onSettings) this.handlers.onSettings(Settings.get());
+    });
+    on('chk-fullscreen', 'change', (event) => {
+      if (this.handlers.onFullscreen) this.handlers.onFullscreen(event.target.checked);
+    });
+    on('btn-reset-settings', 'click', () => {
+      Settings.reset();
+      Settings.apply();
+      this.renderSettings();
+      this.toast('Réglages réinitialisés');
+      if (this.handlers.onSettings) this.handlers.onSettings(Settings.get());
+    });
+
+    on('btn-admin-refresh', 'click', () => this.handlers.onAdminRefresh && this.handlers.onAdminRefresh());
+    on('admin-payments', 'click', (event) => {
+      const button = event.target.closest('[data-payment-action]');
+      if (button && this.handlers.onReviewPayment) {
+        this.handlers.onReviewPayment(button.dataset.paymentId, button.dataset.paymentAction, '');
+      }
+    });
+
+    on('btn-room-create', 'click', () => {
+      this.handlers.onRoomCreate && this.handlers.onRoomCreate({
+        price: Number(byId('room-price').value) || 0,
+        duration: Number(byId('room-duration').value) || 300,
+        maxPlayers: Number(byId('room-players').value) || 5,
+        map: byId('room-map').value,
+        mode: byId('room-mode').value,
+      });
+    });
+    on('btn-room-join-key', 'click', () => {
+      const key = (byId('room-key').value || '').trim();
+      if (!key) {
+        this.setMessage('rooms-message', 'Saisissez une clé de salle.', true);
+        return;
+      }
+      if (this.handlers.onRoomJoinKey) this.handlers.onRoomJoinKey(key);
+    });
+    on('rooms-list', 'click', (event) => {
+      const button = event.target.closest('[data-room-id]');
+      if (button && this.handlers.onRoomJoin) this.handlers.onRoomJoin(button.dataset.roomId);
+    });
+
+    on('btn-ready', 'click', () => this.handlers.onReady && this.handlers.onReady());
+    on('btn-leave-room', 'click', () => this.handlers.onLeaveRoom && this.handlers.onLeaveRoom());
+    on('lobby-chat-input', 'keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      const input = event.target;
+      const text = (input.value || '').trim();
+      if (!text) return;
+      if (this.handlers.onChat) this.handlers.onChat(text);
+      input.value = '';
+    });
+
+    on('btn-requeue', 'click', () => this.handlers.onRequeue && this.handlers.onRequeue());
+    on('btn-replay-accept', 'click', () => this.handlers.onReplayVote && this.handlers.onReplayVote(true));
+    on('btn-replay-reject', 'click', () => this.handlers.onReplayVote && this.handlers.onReplayVote(false));
   }
 
   bindTouch() {
@@ -143,7 +318,12 @@ export class UI {
 
   screen(name) {
     document.querySelectorAll('.screen').forEach((node) => node.classList.remove('active'));
-    if (name) byId(`screen-${name}`).classList.add('active');
+    const target = name ? byId(`screen-${name}`) : null;
+    if (target) {
+      target.classList.remove('hidden');
+      target.classList.add('active');
+    }
+    this.current = name || null;
   }
 
   showHUD(visible) {
@@ -261,74 +441,546 @@ export class UI {
     this.screen('results');
   }
 
-  minimap(layout, player, zone, others) {
+  minimap(layout, player, zone, others, markers) {
     const canvas = byId('minimap');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const size = canvas.width;
-    const half = 400;
-    const project = (x, z) => [(x + half) / (half * 2) * size, (z + half) / (half * 2) * size];
-    ctx.clearRect(0, 0, size, size);
-    ctx.fillStyle = '#11150f';
-    ctx.fillRect(0, 0, size, size);
-    if (!layout) return;
+    const half = MAP_SIZE / 2;
+    const scale = size / (half * 2);
+    const project = (x, z) => [(x + half) * scale, (z + half) * scale];
+    const source = layout || {};
+    const info = markers || {};
 
-    ctx.strokeStyle = 'rgba(190,175,130,.5)';
-    for (const road of layout.roads || []) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = '#0d120e';
+    ctx.fillRect(0, 0, size, size);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, size, size);
+    ctx.clip();
+
+    ctx.strokeStyle = 'rgba(210,220,190,.08)';
+    ctx.lineWidth = 1;
+    for (let step = 1; step < 8; step += 1) {
+      const offset = (size / 8) * step;
       ctx.beginPath();
-      road.points.forEach((point, index) => {
-        const [x, y] = project(point[0], point[1]);
-        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      });
-      ctx.lineWidth = Math.max(1, (road.width || 5) / (half * 2) * size);
+      ctx.moveTo(offset, 0);
+      ctx.lineTo(offset, size);
+      ctx.moveTo(0, offset);
+      ctx.lineTo(size, offset);
       ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(160,140,100,.35)';
-    for (const town of layout.towns || []) {
-      const [x, y] = project(town.x, town.z);
-      ctx.beginPath();
-      ctx.arc(x, y, town.radius / (half * 2) * size, 0, Math.PI * 2);
-      ctx.fill();
+    if (Array.isArray(source.roads)) {
+      ctx.strokeStyle = 'rgba(205,188,138,.7)';
+      for (const road of source.roads) {
+        if (!Array.isArray(road.points) || road.points.length < 2) continue;
+        ctx.beginPath();
+        road.points.forEach((point, index) => {
+          const [x, y] = project(point[0], point[1]);
+          if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.lineWidth = Math.max(1.5, (road.width || 5) * scale * 1.6);
+        ctx.stroke();
+      }
     }
 
-    ctx.fillStyle = 'rgba(70,120,70,.55)';
-    for (const grove of layout.groves || []) {
-      const [x, y] = project(grove.x, grove.z);
-      ctx.fillRect(x - 1, y - 1, 2, 2);
+    if (Array.isArray(source.towns)) {
+      for (const town of source.towns) {
+        const [x, y] = project(town.x, town.z);
+        const radius = Math.max(2, (town.radius || 20) * scale);
+        ctx.fillStyle = 'rgba(168,146,102,.28)';
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(220,200,150,.45)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(240,225,180,.8)';
+        ctx.font = '8px monospace';
+        ctx.fillText(town.name || '', x + radius + 2, y + 3);
+      }
     }
 
-    if (zone) {
+    if (Array.isArray(source.groves)) {
+      ctx.fillStyle = 'rgba(70,120,70,.65)';
+      for (const grove of source.groves) {
+        const [x, y] = project(grove.x, grove.z);
+        ctx.fillRect(x - 1, y - 1, 2, 2);
+      }
+    }
+
+    if (Array.isArray(info.landmarks)) {
+      for (const landmark of info.landmarks) {
+        const [x, y] = project(landmark.x, landmark.z);
+        ctx.fillStyle = landmark.type === 'house' ? '#d8c49a' : '#8aa87a';
+        ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+      }
+    }
+
+    if (zone && Number.isFinite(zone.radius)) {
       const [zx, zy] = project(zone.x || 0, zone.z || 0);
+      const radius = Math.max(1, zone.radius * scale);
+      ctx.fillStyle = 'rgba(255,122,60,.07)';
+      ctx.beginPath();
+      ctx.arc(zx, zy, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.setLineDash([4, 3]);
       ctx.strokeStyle = '#ff7a3c';
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(zx, zy, zone.radius / (half * 2) * size, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
 
-    for (const other of others || []) {
-      if (!other.alive) continue;
-      const [x, y] = project(other.x, other.z);
-      ctx.fillStyle = '#ff5a5a';
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fill();
+    const lootColors = {
+      ammo: '#ffd45c', medkit: '#ff5a5a', armor: '#4da3ff', grenade: '#ff9b45', weapon: '#e8eefc',
+    };
+    if (Array.isArray(info.loot)) {
+      for (const item of info.loot) {
+        const [x, y] = project(item.x, item.z);
+        ctx.fillStyle = lootColors[item.type] || '#ffffff';
+        ctx.fillRect(x - 1, y - 1, 2, 2);
+      }
     }
 
-    if (player) {
-      const [x, y] = project(player.x, player.z);
+    if (Array.isArray(info.vehicles)) {
+      ctx.strokeStyle = '#71d4ff';
+      ctx.lineWidth = 1.5;
+      for (const vehicle of info.vehicles) {
+        const [x, y] = project(vehicle.x, vehicle.z);
+        ctx.strokeRect(x - 2.5, y - 2.5, 5, 5);
+      }
+    }
+
+    if (Array.isArray(others)) {
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      let botCount = 0;
+      let playerCount = 0;
+      for (const other of others) {
+        if (other.alive === false || !Number.isFinite(other.x) || !Number.isFinite(other.z)) continue;
+        const [x, y] = project(other.x, other.z);
+        const isBot = other.isBot === true;
+        if (isBot) botCount += 1; else playerCount += 1;
+        if (!isBot) {
+          const pulse = 4.5 + Math.sin(performance.now() / 220) * 1.5;
+          ctx.strokeStyle = 'rgba(255,212,92,.75)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(x, y, pulse, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = isBot ? '#ff4d4d' : '#ffd45c';
+        ctx.strokeStyle = '#0b0b0b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        const label = isBot ? 'B' : String(other.name || 'P').charAt(0).toUpperCase();
+        ctx.fillStyle = '#0b0b0b';
+        ctx.fillText(label, x + 0.5, y + 3.5);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, x, y + 3);
+      }
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(234,255,241,.9)';
+      ctx.fillText(`J${playerCount} B${botCount}`, size - 3, size - 4);
+      ctx.textAlign = 'left';
+    }
+
+    if (player && Number.isFinite(player.x) && Number.isFinite(player.z)) {
+      const [px, py] = project(player.x, player.z);
+      const sweepRadius = Math.max(26, 150 * scale);
+      const sweepAngle = (performance.now() / 1400) % (Math.PI * 2);
       ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(-(player.yaw || 0));
-      ctx.fillStyle = '#3ddc84';
+      ctx.translate(px, py);
+      ctx.rotate(sweepAngle);
+      const gradient = ctx.createLinearGradient(0, 0, sweepRadius, 0);
+      gradient.addColorStop(0, 'rgba(61,220,132,.32)');
+      gradient.addColorStop(1, 'rgba(61,220,132,0)');
+      ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.moveTo(0, -6);
-      ctx.lineTo(4, 5);
-      ctx.lineTo(-4, 5);
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, sweepRadius, -0.34, 0.06);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = 'rgba(61,220,132,.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(sweepRadius, 0);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(-(player.yaw || 0));
+      ctx.fillStyle = '#0b1a10';
+      ctx.strokeStyle = '#eafff1';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(5, 6);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
       ctx.restore();
     }
+
+    ctx.fillStyle = 'rgba(234,255,241,.9)';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText('N', size / 2 - 3, 10);
+    ctx.restore();
+  }
+
+  setMessage(id, text, error) {
+    const node = byId(id);
+    if (!node) return;
+    node.textContent = text || '';
+    node.style.color = error ? 'var(--red)' : '';
+  }
+
+  setAuthMessage(text, error) {
+    this.setMessage('auth-message', text, error);
+  }
+
+  setAuthTab(tab) {
+    this.authTab = tab === 'register' ? 'register' : 'login';
+    const login = this.authTab === 'login';
+    byId('auth-login-panel').classList.toggle('hidden', !login);
+    byId('auth-reg-panel').classList.toggle('hidden', login);
+    byId('tab-login').classList.toggle('selected', login);
+    byId('tab-register').classList.toggle('selected', !login);
+    this.setAuthMessage('');
+    this.handlers.onSound && this.handlers.onSound('ui/click');
+  }
+
+  setAuthState(user) {
+    const name = user ? String(user.displayName || user.username || 'Joueur') : 'Invité';
+    setText('menu-user', name);
+    setText('menu-meta', user
+      ? `Niv. ${(user.levelInfo && user.levelInfo.level) || user.level || 1} · ${((user.stats && user.stats.wins) || 0)} V · ${((user.stats && user.stats.kills) || 0)} élim.`
+      : 'Connecte-toi pour jouer en ligne');
+    setText('menu-credits', user ? ((user.credits == null ? 0 : user.credits)) : '—');
+    setText('menu-avatar', name.slice(0, 1).toUpperCase());
+    const auth = byId('btn-auth');
+    const logout = byId('btn-logout');
+    const admin = byId('btn-admin');
+    if (auth) {
+      auth.classList.toggle('hidden', !!user);
+      auth.textContent = "SE CONNECTER / S'INSCRIRE";
+    }
+    if (logout) logout.classList.toggle('hidden', !user);
+    if (admin) admin.classList.toggle('hidden', !(user && user.role === 'admin'));
+    if (user) {
+      this.selection.name = name.slice(0, 16);
+      const input = byId('input-name');
+      if (input) input.value = this.selection.name;
+      try { localStorage.setItem('adybe.name', this.selection.name); } catch (error) {}
+    }
+  }
+
+  setApiStatus(ok, text) {
+    const badge = byId('api-status');
+    if (!badge) return;
+    badge.textContent = text || (ok ? 'En ligne' : 'Hors-ligne');
+    badge.classList.toggle('badge-on', !!ok);
+    badge.classList.toggle('badge-off', !ok);
+  }
+
+  setShopFilter(filter) {
+    this.shopFilter = filter === 'skin' || filter === 'character' ? filter : 'all';
+    ['all', 'skin', 'character'].forEach((name) => {
+      const button = byId(`shop-filter-${name}`);
+      if (button) button.classList.toggle('selected', name === this.shopFilter);
+    });
+    this.drawShop();
+  }
+
+  renderShop(items, state) {
+    this.shopItems = Array.isArray(items) ? items : [];
+    this.shopState = state || {};
+    setText('shop-credits', this.shopState.credits == null ? '—' : this.shopState.credits);
+    this.setMessage('shop-message', '');
+    this.drawShop();
+  }
+
+  drawShop() {
+    const grid = byId('shop-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const owned = new Set(this.shopState.owned || []);
+    const equipped = this.shopState.equipped || {};
+    const items = this.shopItems.filter((item) => this.shopFilter === 'all' || item.category === this.shopFilter);
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'Aucun article dans cette catégorie.';
+      grid.appendChild(empty);
+      return;
+    }
+    const rarityColors = { common: '#9aa4ae', uncommon: '#3ddc84', rare: '#4da3ff', epic: '#b366ff', legendary: '#ffcf5c' };
+    const categoryNames = { skin: 'Skin', character: 'Personnage', weaponSkin: 'Arme' };
+    items.forEach((item) => {
+      const card = document.createElement('article');
+      card.className = 'shop-card';
+      const preview = document.createElement('img');
+      preview.src = item.preview || '';
+      preview.alt = item.name || '';
+      preview.loading = 'lazy';
+      const bar = document.createElement('div');
+      bar.className = 'rarity-bar';
+      bar.style.background = rarityColors[item.rarity] || 'var(--muted)';
+      const body = document.createElement('div');
+      body.className = 'card-body';
+      const tag = document.createElement('span');
+      tag.className = 'card-tag';
+      tag.textContent = `${categoryNames[item.category] || 'Objet'} · ${item.rarity || 'common'}`.toUpperCase();
+      const title = document.createElement('strong');
+      title.className = 'card-title';
+      title.textContent = item.name || item.id;
+      const desc = document.createElement('span');
+      desc.className = 'card-desc';
+      desc.textContent = item.description || '';
+      const foot = document.createElement('div');
+      foot.className = 'card-foot';
+      const price = document.createElement('span');
+      price.className = `price${item.price > 0 ? '' : ' free'}`;
+      price.textContent = item.price > 0 ? `${item.price} CR` : 'GRATUIT';
+      const action = document.createElement('button');
+      action.className = 'mini-btn';
+      action.dataset.item = item.id;
+      const equippedId = item.category === 'character' ? equipped.character
+        : item.category === 'weaponSkin' ? equipped.weaponSkin : equipped.skin;
+      if (owned.has(item.id) && equippedId === item.id) {
+        action.textContent = 'ÉQUIPÉ';
+        action.disabled = true;
+        action.classList.add('success');
+      } else if (owned.has(item.id)) {
+        action.textContent = 'ÉQUIPER';
+        action.dataset.shopAction = 'equip';
+      } else {
+        action.textContent = item.price > 0 ? 'ACHETER' : 'OBTENIR';
+        action.dataset.shopAction = 'purchase';
+      }
+      foot.appendChild(price);
+      foot.appendChild(action);
+      body.appendChild(tag);
+      body.appendChild(title);
+      body.appendChild(desc);
+      body.appendChild(foot);
+      card.appendChild(preview);
+      card.appendChild(bar);
+      card.appendChild(body);
+      grid.appendChild(card);
+    });
+  }
+
+  renderProfile(data) {
+    const target = byId('profile-content');
+    if (!target) return;
+    const payload = data || {};
+    const user = payload.user || Session.user() || {};
+    const stats = user.stats || {};
+    const levelInfo = user.levelInfo || {};
+    const level = levelInfo.level || user.level || 1;
+    const xp = levelInfo.currentLevelXp == null ? (user.xp || 0) : levelInfo.currentLevelXp;
+    const nextXp = levelInfo.nextLevelXp || 250;
+    const catalog = payload.catalog || this.shopItems || [];
+    const byItem = new Map(catalog.map((item) => [item.id, item]));
+    const name = String(user.displayName || user.username || 'Joueur');
+    const kd = stats.deaths ? (stats.kills / stats.deaths).toFixed(2) : String(stats.kills || 0);
+    const cells = [
+      ['MATCHS', stats.matches || 0], ['VICTOIRES', stats.wins || 0],
+      ['ÉLIMINATIONS', stats.kills || 0], ['K/D', kd],
+      ['ÉLIM. / MATCH', ((stats.kills || 0) / Math.max(1, stats.matches || 0)).toFixed(1)],
+      ['DÉGÂTS', stats.damage || 0],
+    ];
+    const inventory = user.inventory || [];
+    const equipped = user.equipped || {};
+    target.innerHTML = `
+      <div class="profile-cols">
+        <div>
+          <div class="panel page-panel">
+            <div class="profile-card">
+              <div class="profile-avatar">${escapeHtml(name.slice(0, 1).toUpperCase())}</div>
+              <div>
+                <div class="profile-name">${escapeHtml(name)}</div>
+                <div class="profile-handle">@${escapeHtml(user.username || '—')}</div>
+                <div class="profile-chips"><span class="pill">NIVEAU ${level}</span><span class="pill">${escapeHtml(user.credits == null ? 0 : user.credits)} CR</span></div>
+              </div>
+            </div>
+            <span class="section-label">PROGRESSION</span>
+            <div class="xp-track"><i style="width:${Math.round((levelInfo.progress || 0) * 100)}%"></i></div>
+            <p class="muted">${escapeHtml(xp)} / ${escapeHtml(nextXp)} XP vers le niveau ${Number(level) + 1}</p>
+          </div>
+          <div class="stat-grid">${cells.map(([label, value]) => `<div class="stat-cell"><strong>${escapeHtml(value)}</strong><span>${label}</span></div>`).join('')}</div>
+        </div>
+        <div>
+          <div class="page-head"><div><h2 style="font-size:24px">INVENTAIRE</h2><p>${inventory.length} objet(s)</p></div></div>
+          <div class="inventory-grid">${inventory.length ? inventory.map((id) => {
+            const item = byItem.get(id) || { id, name: id, category: 'Objet', preview: '' };
+            const equippedId = item.category === 'character' ? equipped.character
+              : item.category === 'weaponSkin' ? equipped.weaponSkin : equipped.skin;
+            const isEquipped = equippedId === id;
+            return `<div class="inv-card"><img src="${escapeHtml(item.preview || '')}" alt="" loading="lazy"><strong>${escapeHtml(item.name || id)}</strong><button class="mini-btn ${isEquipped ? 'success' : ''}" data-equip="${escapeHtml(id)}" ${isEquipped ? 'disabled' : ''}>${isEquipped ? 'ÉQUIPÉ' : 'ÉQUIPER'}</button></div>`;
+          }).join('') : '<div class="empty-state">Ton inventaire est vide.</div>'}</div>
+        </div>
+      </div>`;
+  }
+
+  renderRanking(list) {
+    const target = byId('ranking-list');
+    if (!target) return;
+    const entries = Array.isArray(list) ? list : ((list && list.leaderboard) || []);
+    if (!entries.length) {
+      target.innerHTML = '<div class="empty-state">Aucun combattant classé pour le moment.</div>';
+      return;
+    }
+    const row = (cells, className) => `<div class="ranking-row ${className}">${cells.map((cell, index) => `<span class="${index === 0 ? 'rank' : ''}">${escapeHtml(cell)}</span>`).join('')}</div>`;
+    target.innerHTML = row(['#', 'COMBATTANT', 'VICT.', 'ÉLIM.', 'DÉGÂTS'], 'header')
+      + entries.map((entry, index) => row([
+        String(index + 1),
+        String(entry.displayName || entry.username || '?'),
+        String(entry.wins || 0), String(entry.kills || 0), String(entry.damage || 0),
+      ], index < 3 ? `rank-${index + 1}` : '')).join('');
+  }
+
+  renderSettings() {
+    const s = Settings.get();
+    const setRange = (id, value, label) => {
+      const node = byId(id);
+      if (node) node.value = value;
+      setText(`${id}-value`, label);
+    };
+    setRange('set-master', Math.round(s.master * 100), Math.round(s.master * 100));
+    setRange('set-music', Math.round(s.music * 100), Math.round(s.music * 100));
+    setRange('set-sfx', Math.round(s.sfx * 100), Math.round(s.sfx * 100));
+    setRange('set-sensitivity', s.sensitivity, s.sensitivity);
+    const camera = byId('set-camera');
+    const quality = byId('set-quality');
+    const audio = byId('chk-audio');
+    if (camera) camera.value = s.camera;
+    if (quality) quality.value = s.quality;
+    if (audio) audio.checked = s.sound !== false;
+    setText('settings-info', `Version ${VERSION} · Préférences enregistrées sur cet appareil (${s.camera.toUpperCase()} / ${s.quality.toUpperCase()}).`);
+  }
+
+  renderAdmin(stats, payments) {
+    setText('admin-stats', '');
+    const cells = [
+      ['UTILISATEURS', stats.users], ['EN LIGNE', stats.connected],
+      ['MATCHS', stats.matches], ['PAIEMENTS ATT.', stats.pendingPayments],
+      ['PAIEMENTS OK', stats.approvedPayments], ['REVENUS (AR)', stats.revenue],
+      ['RETRAITS ATT.', stats.pendingWithdrawals], ['CRÉDITS EN JEU', stats.creditsInCirculation],
+    ];
+    const grid = byId('admin-stats');
+    if (grid) {
+      grid.innerHTML = cells.map(([label, value]) => `<div class="stat-cell"><strong>${escapeHtml(value == null ? 0 : value)}</strong><span>${label}</span></div>`).join('');
+    }
+    const list = byId('admin-payments');
+    if (!list) return;
+    const pending = (Array.isArray(payments) ? payments : []).filter((p) => p.status === 'pending');
+    if (!pending.length) {
+      list.innerHTML = '<div class="empty-state">Aucun paiement en attente.</div>';
+      return;
+    }
+    list.innerHTML = pending.map((p) => `
+      <div class="payment-row">
+        <div>
+          <strong>${escapeHtml(p.displayName || p.username || '?')} (@${escapeHtml(p.username || '?')})</strong>
+          <p>${escapeHtml(p.offerName || 'Offre')} · ${escapeHtml(p.operator || '?')} · ${escapeHtml(p.amount || 0)} Ar · Réf. ${escapeHtml(p.reference || '?')}</p>
+        </div>
+        <div class="payment-actions">
+          <button class="mini-btn success" data-payment-action="approve" data-payment-id="${escapeHtml(p.id)}">VALIDER</button>
+          <button class="mini-btn danger" data-payment-action="refuse" data-payment-id="${escapeHtml(p.id)}">REFUSER</button>
+        </div>
+      </div>`).join('');
+  }
+
+  renderRooms(list) {
+    const target = byId('rooms-list');
+    if (!target) return;
+    const rooms = Array.isArray(list) ? list : ((list && list.rooms) || []);
+    if (!rooms.length) {
+      target.innerHTML = '<div class="empty-state">Aucune salle disponible.</div>';
+      return;
+    }
+    target.innerHTML = rooms.map((room) => {
+      const locked = room.locked || room.status === 'active' || room.status === 'closed' || room.status === 'finished'
+        || (room.playerCount != null && room.maxPlayers != null && room.playerCount >= room.maxPlayers);
+      const mapName = (MAPS[room.map] && MAPS[room.map].name) || room.map || 'Forêt';
+      return `<article class="shop-card">
+        <div class="card-body">
+          <span class="card-tag">${escapeHtml(room.type === 'private' ? 'PRIVÉE' : 'PUBLIQUE')} · ${escapeHtml(room.id)}</span>
+          <strong class="card-title">${escapeHtml(room.name || room.id)}</strong>
+          <span class="card-desc">${escapeHtml(mapName)} · ${escapeHtml(room.mode || 'solo')} · ${escapeHtml(room.playerCount == null ? 0 : room.playerCount)}/${escapeHtml(room.maxPlayers || 10)} joueurs</span>
+          <div class="card-foot">
+            <span class="price${room.price > 0 ? '' : ' free'}">${room.price > 0 ? `${escapeHtml(room.price)} CR` : 'GRATUIT'}</span>
+            <button class="mini-btn" data-room-id="${escapeHtml(room.id)}" ${locked ? 'disabled' : ''}>${locked ? 'INDISPONIBLE' : 'REJOINDRE'}</button>
+          </div>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  renderLobby(state) {
+    const data = state || {};
+    const info = data.roomInfo || {};
+    const mapName = (MAPS[data.map || info.map] && MAPS[data.map || info.map].name) || data.map || info.map || '—';
+    setText('lobby-room-info', `${mapName} · ${data.mode || info.mode || 'solo'} · ${data.roomId || info.id || ''}`);
+    setText('lobby-code', data.inviteCode || info.inviteCode || data.roomKey || info.key || '—');
+    setText('lobby-countdown', data.countdown > 0 ? `${data.countdown} s` : 'EN ATTENTE');
+    const me = (data.players || []).find((player) => player.id === data.selfId);
+    setText('lobby-ready', me ? (me.ready ? 'PRÊT' : 'EN ATTENTE') : 'EN ATTENTE');
+    const list = byId('lobby-players');
+    if (list) {
+      list.innerHTML = (data.players || []).map((player) => `
+        <div class="lobby-player"><span>${escapeHtml(player.name || player.id)}</span>
+        <span class="ready ${player.ready ? 'on' : ''}">${player.ready ? 'PRÊT' : 'EN ATTENTE'}${player.connected === false ? ' · ABSENT' : ''}</span></div>`).join('')
+        || '<div class="empty-state">En attente de combattants…</div>';
+    }
+    const chat = byId('lobby-chat-log');
+    if (chat) {
+      chat.innerHTML = '';
+      this.lobbyChat.slice(-30).forEach((line) => {
+        const row = document.createElement('div');
+        row.innerHTML = `<b>${escapeHtml(line.name)}</b> ${escapeHtml(line.text)}`;
+        chat.appendChild(row);
+      });
+      chat.scrollTop = chat.scrollHeight;
+    }
+  }
+
+  lobbyMessage(name, text) {
+    this.lobbyChat.push({ name: name || 'Serveur', text: String(text || '') });
+    if (this.lobbyChat.length > 60) this.lobbyChat.shift();
+    const chat = byId('lobby-chat-log');
+    if (!chat) return;
+    const row = document.createElement('div');
+    row.innerHTML = `<b>${escapeHtml(name || 'Serveur')}</b> ${escapeHtml(text || '')}`;
+    chat.appendChild(row);
+    while (chat.children.length > 30) chat.removeChild(chat.firstChild);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  showReplayVote(state) {
+    const block = byId('results-replay-vote');
+    const requeue = byId('btn-requeue');
+    const accept = byId('btn-replay-accept');
+    const reject = byId('btn-replay-reject');
+    const nodes = [block, requeue, accept, reject].filter(Boolean);
+    if (!state) {
+      nodes.forEach((node) => node.classList.add('hidden'));
+      return;
+    }
+    nodes.forEach((node) => node.classList.remove('hidden'));
+    const status = state.status === 'pending' ? 'Vote en cours' : state.status === 'approved' ? 'Rejeu accepté' : 'Rejeu refusé';
+    const seconds = state.expiresAt ? Math.max(0, Math.ceil((state.expiresAt - Date.now()) / 1000)) : 0;
+    setText('replay-vote-info', `${status} · ${state.accepted || 0}/${state.votes || 0} en faveur${seconds ? ` · ${seconds} s` : ''}${state.myVote != null ? (state.myVote ? ' · Votre vote : oui' : ' · Votre vote : non') : ''}`);
   }
 }

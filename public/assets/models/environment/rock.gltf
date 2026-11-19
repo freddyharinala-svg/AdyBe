@@ -1,0 +1,107 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "ADY asset generator"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "ADY_Rock"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "ADY_Rock",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "indices": 2,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "ADY_RockMat",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.45,
+          0.46,
+          0.44,
+          1
+        ],
+        "metallicFactor": 0.2,
+        "roughnessFactor": 0.95
+      },
+      "doubleSided": true
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3",
+      "min": [
+        -0.8,
+        0,
+        -0.8
+      ],
+      "max": [
+        0.8,
+        1.2,
+        0.8
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 12,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 144,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 144,
+      "byteLength": 144,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 288,
+      "byteLength": 24,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 312,
+      "uri": "data:application/octet-stream;base64,zcxMvwAAAADNzEy/zcxMPwAAAADNzEy/AAAAAJqZmT8AAAAAzcxMPwAAAADNzEy/zcxMPwAAAADNzEw/AAAAAJqZmT8AAAAAzcxMPwAAAADNzEw/zcxMvwAAAADNzEw/AAAAAJqZmT8AAAAAzcxMvwAAAADNzEw/zcxMvwAAAADNzEy/AAAAAJqZmT8AAAAAAAAAANUADr9AAVU/AAAAANUADr9AAVU/AAAAANUADr9AAVU/QAFVv9UADr8AAAAAQAFVv9UADr8AAAAAQAFVv9UADr8AAAAAAAAAgNUADr9AAVW/AAAAgNUADr9AAVW/AAAAgNUADr9AAVW/QAFVP9UADr8AAAAAQAFVP9UADr8AAAAAQAFVP9UADr8AAAAAAAABAAIAAwAEAAUABgAHAAgACQAKAAsA"
+    }
+  ]
+}

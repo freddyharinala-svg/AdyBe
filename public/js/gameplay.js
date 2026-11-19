@@ -1,8 +1,12 @@
 import {
   MAP_SIZE, ZONE, QUALITY_LEVELS, WEAPONS, BOT_NAMES, BOT_TINTS,
-  MODES, MAPS, clamp, rand, dist2,
+  CHARACTER_MODELS, SKIN_TINTS, FX_PATHS, MODES, MAPS, clamp, rand, dist2,
 } from './config.js';
 import { World, makeMaterial, primitive } from './world.js';
+import { Models } from './models.js';
+import { GodotRandom } from './rng.js';
+import { Api } from './api.js';
+import { Session } from './session.js';
 
 const forwardOf = (actor) => ({
   x: -Math.sin(actor.yaw) * Math.cos(actor.pitch),
@@ -11,6 +15,18 @@ const forwardOf = (actor) => ({
 });
 
 const rightOf = (actor) => ({ x: Math.cos(actor.yaw), y: 0, z: -Math.sin(actor.yaw) });
+
+const resolveCharacter = (value) => (
+  CHARACTER_MODELS[value] ? value : 'char_ch15'
+);
+
+const resolveTint = (value, fallback) => {
+  if (Array.isArray(value) && value.length >= 3) return value.slice(0, 3);
+  if (SKIN_TINTS[value]) return SKIN_TINTS[value].slice();
+  return fallback ? fallback.slice() : SKIN_TINTS.skin_recruit.slice();
+};
+
+const ONE_SHOT_ANIMS = new Set(['Fire', 'Reload', 'Hit', 'Grenade', 'Death', 'EnterCar', 'ExitCar', 'Jump']);
 
 function raySphere(origin, direction, center, radius) {
   const ox = origin.x - center.x;
@@ -63,19 +79,41 @@ export class Game {
   constructor(app, assets, ui, net) {
     this.app = app;
     this.assets = assets;
+    this.models = new Models(app);
     this.ui = ui;
     this.net = net;
+    this.avatarTasks = [];
+    this.zoomed = false;
+    this.cameraMode = 'tps';
+    this.sensitivity = 6;
+    this.sound = true;
+    this.kickPitch = 0;
+    this.kickYaw = 0;
+    this.shake = 0;
     this.running = false;
     this.paused = false;
     this.over = false;
     this.actors = [];
     this.bots = [];
     this.remotes = new Map();
+    this.remoteStates = new Map();
     this.loot = [];
     this.vehicles = [];
     this.tracers = [];
+    this.grenades = [];
+    this.effects = [];
+    this.fxMaterials = new Map();
     this.materials = new Map();
+    this.netInfo = {};
+    this.lobbyState = null;
+    this.startedAt = 0;
+    this.matchRecorded = false;
+    this.serverRecorded = false;
+    this.lastResult = null;
+    this.networkInterval = 0.1;
     this.keys = {};
+    this.interactHeld = false;
+    this.vehicleCooldownUntil = 0;
     this.mouse = { dx: 0, dy: 0, left: false, right: false };
     this.boundKey = null;
     this.boundKeyUp = null;
@@ -83,42 +121,129 @@ export class Game {
     this.boundDown = null;
     this.boundUp = null;
     this.boundLock = null;
+    this.installNetHooks();
   }
 
-  start(selection, qualityName, layout) {
+  applySettings(settings) {
+    const detail = settings && typeof settings === 'object' ? settings : {};
+    if (detail.camera === 'fps' || detail.camera === 'tps') {
+      this.setCameraMode(detail.camera);
+    }
+    const value = Number(detail.sensitivity);
+    if (Number.isFinite(value)) this.sensitivity = clamp(value, 1, 12);
+    if (typeof detail.sound === 'boolean') {
+      this.sound = detail.sound;
+      if (this.assets && typeof this.assets.setEnabled === 'function') this.assets.setEnabled(detail.sound);
+    }
+    if (detail.quality && QUALITY_LEVELS[detail.quality]) {
+      this.qualityName = detail.quality;
+      if (!this.running) this.quality = QUALITY_LEVELS[detail.quality];
+    }
+    this.settings = { ...(this.settings || {}), ...detail };
+  }
+
+  setCameraMode(mode) {
+    const next = mode === 'fps' ? 'fps' : 'tps';
+    this.cameraMode = next;
+    this.syncLocalVisibility();
+  }
+
+  setNetInfo(info) {
+    const source = info && typeof info === 'object' ? info : {};
+    this.netInfo = { ...this.netInfo, ...source };
+    if (source.roomId || source.room) this.netInfo.roomId = source.roomId || source.room;
+    return this.netInfo;
+  }
+
+  setLobbyState(state) {
+    this.lobbyState = state && typeof state === 'object' ? state : null;
+    if (!this.lobbyState) return;
+    if (this.lobbyState.players) this.applyNetworkPlayers(this.lobbyState.players, this.lobbyState.zone);
+  }
+
+  syncLocalVisibility() {
+    const player = this.player;
+    if (!player || !player.entity) return;
+    const hidden = this.cameraMode === 'fps' || player.driving || !player.alive;
+    player.entity.enabled = !hidden;
+    if (this.viewWeapon) this.viewWeapon.enabled = this.cameraMode === 'fps' && player.alive && !player.driving;
+  }
+
+  async start(selection, qualityName, layout) {
     this.stop();
-    this.selection = selection;
+    const equipped = typeof Session.equipped === 'function' ? Session.equipped() : {};
+    const requested = selection && typeof selection === 'object' ? selection : {};
+    this.selection = {
+      ...requested,
+      name: requested.name || (typeof Session.displayName === 'function' ? Session.displayName() : 'Combattant'),
+      character: requested.character || equipped.character || null,
+      skin: requested.skin || equipped.skin || 'skin_recruit',
+      mode: requested.mode === 'training' ? 'training' : 'solo',
+      map: MAPS[requested.map] ? requested.map : 'forest',
+    };
     this.layout = layout;
-    this.quality = QUALITY_LEVELS[qualityName];
-    this.mapDef = MAPS[selection.map];
-    this.modeDef = MODES[selection.mode];
+    this.qualityName = QUALITY_LEVELS[qualityName] ? qualityName : (this.qualityName || 'low');
+    this.quality = QUALITY_LEVELS[this.qualityName] || QUALITY_LEVELS.low;
+    this.assets.setQuality(this.quality);
+    this.mapDef = MAPS[this.selection.map];
+    this.modeDef = MODES[this.selection.mode];
     this.group = new pc.Entity('actors');
     this.app.root.addChild(this.group);
+    this.avatarTasks = [];
+    this.zoomed = false;
+    this.kickPitch = 0;
+    this.kickYaw = 0;
+    this.shake = 0;
+    this.grenades = [];
+    this.effects = [];
+    this.remoteStates = new Map();
+    this.matchRecorded = false;
+    this.serverRecorded = false;
+    this.lastResult = null;
+    this.startedAt = Date.now();
+    this.networkTimer = 0;
+    this.lastWorldMessage = null;
+    this.setNetInfo({
+      roomId: this.selection.roomId || null,
+      roomKey: this.selection.roomKey || null,
+      mode: this.selection.mode,
+      map: this.selection.map,
+      name: this.selection.name,
+    });
+    this.applySettings(this.settings || {});
 
-    this.world = new World(this.app, this.assets, layout, this.mapDef, this.quality);
-    this.world.build();
+    this.world = new World(this.app, this.assets, this.models, layout, this.mapDef, this.quality);
+    await this.world.build();
 
     this.camera = new pc.Entity('camera');
     this.camera.addComponent('camera', {
       clearColor: new pc.Color(this.mapDef.sky[0], this.mapDef.sky[1], this.mapDef.sky[2]),
-      fov: 74,
+      fov: 68,
       nearClip: 0.08,
-      farClip: 620,
+      farClip: Math.min(620, this.quality.fogEnd + 140),
     });
     this.app.root.addChild(this.camera);
+    this.createViewWeapon();
+    this.syncLocalVisibility();
 
     const spawnAngle = rand(0, Math.PI * 2);
     const spawnRadius = this.mapDef.biome === 'forest' ? 150 : 95;
     this.player = this.createActor({
-      id: 'local', name: selection.name, tint: [0.95, 0.72, 0.32], isPlayer: true,
+      id: 'local', name: this.selection.name,
+      tint: resolveTint(this.selection.skin, SKIN_TINTS.skin_recruit),
+      character: resolveCharacter(this.selection.character),
+      isPlayer: true,
       x: Math.cos(spawnAngle) * spawnRadius, y: 0, z: Math.sin(spawnAngle) * spawnRadius,
     });
     this.actors = [this.player];
     this.player.weapons = newWeaponState();
+    this.syncLocalVisibility();
 
     this.spawnBots();
-    this.spawnLoot();
-    this.spawnVehicles();
+    await this.spawnLoot();
+    await this.spawnVehicles();
+    await Promise.all(this.avatarTasks);
+    this.avatarTasks = [];
     this.bindInput();
 
     this.zoneEnabled = this.modeDef.zone;
@@ -139,6 +264,7 @@ export class Game {
     this.running = true;
     this.lastFeedVehicle = false;
     this.app.on('update', this.update, this);
+    if (this.pendingMatchStart) this.onMatchStart(this.pendingMatchStart);
 
     this.ui.showHUD(true);
     this.ui.screen(null);
@@ -156,14 +282,22 @@ export class Game {
     if (this.group) { this.group.destroy(); this.group = null; }
     if (this.camera) { this.camera.destroy(); this.camera = null; }
     if (this.world) { this.world.destroy(); this.world = null; }
+    this.avatarTasks = [];
     this.actors = [];
     this.bots = [];
     this.remotes.clear();
+    this.remoteStates.clear();
     this.loot = [];
     this.vehicles = [];
     this.tracers = [];
+    this.grenades = [];
+    this.effects = [];
+    this.viewWeapon = null;
+    this.player = null;
     this.paused = false;
     this.over = false;
+    this.interactHeld = false;
+    this.vehicleCooldownUntil = 0;
     this.ui.showHUD(false);
   }
 
@@ -196,14 +330,72 @@ export class Game {
       waypoint: { x: rand(-120, 120), z: rand(-120, 120) },
       thinkTimer: rand(0.2, 1),
       entity: makeActorVisual(this.app, this.group, options.tint, this.materials),
+      animLock: 0,
+      character: options.character || 'char_ch15',
     };
     actor.entity.setPosition(actor.pos.x, actor.pos.y, actor.pos.z);
     this.actors.push(actor);
+    this.avatarTasks.push(this.upgradeAvatar(actor));
     return actor;
   }
 
+  async upgradeAvatar(actor) {
+    const character = resolveCharacter(actor.character);
+    const url = CHARACTER_MODELS[character];
+    const avatar = await this.models.createAvatar(url, actor.tint, actor.isBot ? 1.1 : 1.15);
+    if (!this.actors.includes(actor)) {
+      avatar.entity.destroy();
+      return;
+    }
+    if (actor.entity && actor.entity.parent) actor.entity.destroy();
+    const pivot = new pc.Entity('actor');
+    this.group.addChild(pivot);
+    pivot.addChild(avatar.entity);
+    pivot.setPosition(actor.pos.x, actor.pos.y, actor.pos.z);
+    pivot.setEulerAngles(0, actor.yaw * 180 / Math.PI, 0);
+    actor.entity = pivot;
+    actor.avatar = avatar;
+    if (actor.isPlayer) this.syncLocalVisibility();
+  }
+
+  createViewWeapon() {
+    if (!this.camera) return;
+    const root = new pc.Entity('view-weapon');
+    const bodyMaterial = this.materials.get('view-weapon')
+      || (() => {
+        const material = makeMaterial(this.app, { color: [0.13, 0.15, 0.16], specular: [0.12, 0.12, 0.12] });
+        this.materials.set('view-weapon', material);
+        return material;
+      })();
+    const parts = [
+      { position: [0, 0, -0.34], scale: [0.075, 0.09, 0.62] },
+      { position: [0, -0.13, 0.04], scale: [0.085, 0.22, 0.13] },
+      { position: [0, 0.07, -0.55], scale: [0.035, 0.035, 0.24] },
+    ];
+    for (const part of parts) {
+      const mesh = new pc.Entity('view-weapon-part');
+      mesh.addComponent('render', { type: 'box', material: bodyMaterial, castShadows: false, receiveShadows: false });
+      mesh.setLocalPosition(part.position[0], part.position[1], part.position[2]);
+      mesh.setLocalScale(part.scale[0], part.scale[1], part.scale[2]);
+      root.addChild(mesh);
+    }
+    root.setLocalPosition(0.3, -0.26, -0.42);
+    this.camera.addChild(root);
+    this.viewWeapon = root;
+  }
+
+  playActorAnim(actor, name, force) {
+    if (!actor.avatar) return;
+    if (actor.animLock > 0 && !ONE_SHOT_ANIMS.has(name)) return;
+    actor.avatar.play(name, force);
+  }
+
+  lockAnim(actor, duration) {
+    actor.animLock = Math.max(actor.animLock || 0, duration);
+  }
+
   spawnBots() {
-    const count = this.quality.bots;
+    const count = this.modeDef.id === 'training' ? 7 : 5;
     for (let i = 0; i < count; i += 1) {
       let x = 0;
       let z = 0;
@@ -224,34 +416,121 @@ export class Game {
     }
   }
 
-  spawnLoot() {
-    const definitions = [
-      { type: 'ammo', color: [0.9, 0.72, 0.25], count: 7 },
-      { type: 'medkit', color: [0.9, 0.25, 0.25], count: 6 },
-      { type: 'armor', color: [0.3, 0.64, 1], count: 4 },
-      { type: 'grenade', color: [1, 0.55, 0.2], count: 4 },
+  async spawnLoot() {
+    const definitions = {
+      ammo: { path: 'assets/models/equipment/ammo_box.gltf', scale: 2.2, y: 0.392, color: [0.9, 0.72, 0.25] },
+      medkit: { path: 'assets/models/equipment/medkit.gltf', scale: 2, y: 0.43, color: [0.9, 0.25, 0.25] },
+      armor: { path: 'assets/models/equipment/armor_vest.gltf', scale: 2, y: 0.15, color: [0.3, 0.64, 1] },
+      grenade: { path: 'assets/polyhaven/stick_grenade/stick_grenade_1k.gltf', scale: 1.6, y: 0.47, color: [1, 0.55, 0.2] },
+      weapon: { scale: 1, y: 0.55, color: [0.86, 0.9, 0.96] },
+    };
+    const spot = (type, x, z, weaponKey) => ({ type, x, z, weaponKey });
+    const forestSpots = [
+      spot('medkit', -18, -18), spot('armor', 16, 22), spot('ammo', 0, 44), spot('grenade', 28, -30),
+      spot('medkit', -58, 32), spot('weapon', 34, 84, 'rifle'), spot('armor', 84, -62), spot('weapon', 140, 34, 'sniper'),
+      spot('medkit', -108, -56), spot('weapon', 196, 136, 'pistol'), spot('ammo', -52, 47), spot('medkit', 34, 96),
+      spot('grenade', 180, 120), spot('armor', -120, 8), spot('ammo', 120, 16), spot('weapon', 64, -236, 'rifle'),
+      spot('medkit', 0, 160), spot('grenade', -160, -50), spot('armor', 150, 120), spot('weapon', -150, 112, 'pistol'),
+      spot('ammo', 120, -130), spot('medkit', -20, 210), spot('grenade', 78, -70), spot('weapon', -60, 50, 'sniper'),
     ];
-    for (const definition of definitions) {
-      const material = makeMaterial(this.app, { color: definition.color, emissive: definition.color.map((v) => v * 0.15) });
-      for (let i = 0; i < definition.count; i += 1) {
-        const angle = rand(0, Math.PI * 2);
-        const radius = rand(18, 160);
-        const x = Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-        const entity = primitive(this.app, 'box', [x, 0.4, z], [0.9, 0.55, 0.65], angle, material, this.group);
-        this.loot.push({ id: `loot-${this.loot.length}`, type: definition.type, x, z, entity });
+    const citySpots = [
+      spot('medkit', 26, 26), spot('armor', -26, 26), spot('ammo', 26, -26), spot('grenade', -26, -26),
+      spot('weapon', 54, 0, 'rifle'), spot('medkit', -54, 0), spot('weapon', 0, 54, 'sniper'), spot('armor', 0, -54),
+      spot('weapon', 80, 80, 'pistol'), spot('ammo', -80, -80), spot('grenade', 80, -80), spot('medkit', -80, 80),
+      spot('armor', 104, 0), spot('ammo', 0, 104), spot('medkit', -104, 0), spot('weapon', 0, -104, 'rifle'),
+      spot('grenade', 78, 26), spot('medkit', 26, 78), spot('armor', -78, -26), spot('ammo', -26, -78),
+      spot('weapon', 52, 52, 'pistol'), spot('weapon', -52, -52, 'sniper'), spot('medkit', 52, -52), spot('grenade', -52, 52),
+    ];
+    const limit = this.quality.exactLoot || 56;
+    const spots = this.mapDef.biome === 'forest' ? forestSpots : citySpots;
+    const fillLimit = Math.max(0, limit - spots.length);
+    const fillTypes = ['ammo', 'medkit', 'armor', 'grenade', 'weapon', 'ammo', 'medkit', 'weapon', 'grenade', 'ammo'];
+    const fillWeapons = ['rifle', 'pistol', 'sniper'];
+    const fillRng = new GodotRandom(this.mapDef.biome === 'forest' ? 918273 : 627384);
+    for (let added = 0, attempts = 0; added < fillLimit && attempts < fillLimit * 40; attempts += 1) {
+      const x = fillRng.randfRange(-MAP_SIZE * 0.43, MAP_SIZE * 0.43);
+      const z = fillRng.randfRange(-MAP_SIZE * 0.43, MAP_SIZE * 0.43);
+      if (Math.hypot(x, z) < 18) continue;
+      if (spots.some((entry) => Math.hypot(entry.x - x, entry.z - z) < 12)) continue;
+      const type = fillTypes[fillRng.randi() % fillTypes.length];
+      const weaponKey = type === 'weapon' ? fillWeapons[fillRng.randi() % fillWeapons.length] : undefined;
+      spots.push(spot(type, x, z, weaponKey));
+      added += 1;
+    }
+    const materials = new Map();
+    for (const item of spots) {
+      if (this.loot.length >= limit) break;
+      const definition = definitions[item.type];
+      if (!definition) continue;
+      let material = materials.get(item.type);
+      if (!material) {
+        material = makeMaterial(this.app, {
+          color: definition.color,
+          emissive: definition.color.map((value) => value * 0.18),
+        });
+        materials.set(item.type, material);
       }
+      const angle = rand(0, Math.PI * 2);
+      let entity = null;
+      if (item.type !== 'weapon') {
+        entity = await this.models.instantiate(definition.path, { name: `loot-${item.type}` });
+      }
+      if (entity) {
+        entity.setPosition(item.x, definition.y, item.z);
+        entity.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+        entity.setLocalScale(definition.scale, definition.scale, definition.scale);
+        this.group.addChild(entity);
+      } else if (item.type === 'weapon') {
+        entity = new pc.Entity(`loot-weapon-${item.weaponKey || 'rifle'}`);
+        primitive(this.app, 'box', [0, 0, 0], [1.15, 0.18, 0.24], 0, material, entity);
+        primitive(this.app, 'box', [0.72, 0.03, 0], [0.72, 0.1, 0.1], 0, material, entity);
+        primitive(this.app, 'box', [-0.5, -0.13, 0], [0.34, 0.32, 0.15], 0, material, entity);
+        entity.setPosition(item.x, definition.y, item.z);
+        entity.setEulerAngles(0, angle * 180 / Math.PI, 0);
+        this.group.addChild(entity);
+      } else {
+        entity = primitive(
+          this.app,
+          'box',
+          [item.x, definition.y, item.z],
+          [0.9 * definition.scale, 0.55 * definition.scale, 0.65 * definition.scale],
+          angle,
+          material,
+          this.group,
+        );
+      }
+      this.loot.push({
+        id: `loot-${this.loot.length}`,
+        type: item.type,
+        weaponKey: item.weaponKey || null,
+        x: item.x,
+        z: item.z,
+        entity,
+      });
     }
   }
 
-  spawnVehicles() {
-    const material = makeMaterial(this.app, { color: [0.30, 0.36, 0.32] });
+  async spawnVehicles() {
     const spots = this.mapDef.biome === 'forest'
-      ? [[-52, 47], [34, 96]]
-      : [[9, 14], [-22, -12]];
+      ? [[-52, 47], [34, 96], [180, 120]]
+      : [[9, 14], [-22, -12], [78, 78]];
     for (const spot of spots) {
-      const entity = primitive(this.app, 'box', [spot[0], 0.85, spot[1]], [4.2, 1.7, 2.2], rand(0, Math.PI * 2), material, this.group);
-      this.vehicles.push({ x: spot[0], z: spot[1], yaw: entity.getLocalEulerAngles().y * Math.PI / 180, entity, occupant: null });
+      const yaw = rand(0, Math.PI * 2);
+      const entity = new pc.Entity('vehicle');
+      const model = await this.models.instantiate('assets/models/vehicles/humvee.glb', { name: 'humvee' });
+      if (model) {
+        model.setLocalPosition(0, 0.02, 0);
+        model.setLocalEulerAngles(0, 180, 0);
+        model.setLocalScale(0.6, 0.6, 0.6);
+        entity.addChild(model);
+      } else {
+        primitive(this.app, 'box', [0, 0.85, 0], [3.2, 1.7, 5], Math.PI, this.materials.get('vehicle') || makeMaterial(this.app, { color: [0.30, 0.36, 0.32] }), entity);
+      }
+      entity.setPosition(spot[0], 0, spot[1]);
+      entity.setEulerAngles(0, yaw * 180 / Math.PI, 0);
+      this.group.addChild(entity);
+      this.vehicles.push({ x: spot[0], z: spot[1], yaw, entity, occupant: null });
+      this.world.colliders.push({ x: spot[0], z: spot[1], r: 2.45, h: 1.9 });
     }
   }
 
@@ -264,12 +543,15 @@ export class Game {
       if (event.code === 'KeyR') this.reload();
       if (event.code === 'KeyQ') this.useMedkit();
       if (event.code === 'KeyG') this.useGrenade();
-      if (event.code === 'KeyE') this.toggleVehicle();
+      if (event.code === 'KeyE') { this.interactHeld = true; this.toggleVehicle(); }
       if (event.code === 'KeyV') this.toggleView();
       const slots = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
       if (slots[event.code] != null) this.selectWeapon(slots[event.code]);
     };
-    this.boundKeyUp = (event) => { this.keys[event.code] = false; };
+    this.boundKeyUp = (event) => {
+      this.keys[event.code] = false;
+      if (event.code === 'KeyE') this.interactHeld = false;
+    };
     this.boundMove = (event) => {
       if (document.pointerLockElement !== this.app.graphicsDevice.canvas) return;
       this.mouse.dx += event.movementX;
@@ -338,8 +620,9 @@ export class Game {
   }
 
   toggleView() {
-    const camera = this.camera.camera;
-    camera.fov = camera.fov > 60 ? 35 : 74;
+    const next = this.cameraMode === 'fps' ? 'tps' : 'fps';
+    this.setCameraMode(next);
+    this.ui.feed(next === 'fps' ? 'Caméra à la première personne [V]' : 'Caméra à la troisième personne [V]');
   }
 
   selectWeapon(index) {
@@ -355,6 +638,8 @@ export class Game {
     const weapon = WEAPONS[player.weaponIndex];
     if (player.reloadTimer > 0 || state.mag >= weapon.magSize || state.reserve <= 0) return;
     player.reloadTimer = weapon.reload;
+    this.playActorAnim(player, 'Reload', true);
+    this.lockAnim(player, 0.35);
     this.assets.play('weapons/reload', 0.4);
   }
 
@@ -362,47 +647,109 @@ export class Game {
     const player = this.player;
     if (player.medkits <= 0 || player.hp >= 100) return;
     player.medkits -= 1;
-    player.hp = Math.min(100, player.hp + 55);
+    player.hp = Math.min(100, player.hp + 40);
     this.assets.play('player/heal', 0.5);
-    this.ui.feed('+55 points de vie', '#3ddc84');
+    this.ui.feed('+40 points de vie', '#3ddc84');
   }
 
   useGrenade() {
     const player = this.player;
-    if (player.grenades <= 0) return;
+    if (!player || !player.alive || player.grenades <= 0) return;
     player.grenades -= 1;
-    const direction = forwardOf(player);
-    const origin = { x: player.pos.x, y: player.pos.y + 1.5, z: player.pos.z };
-    const center = {
-      x: origin.x + direction.x * 22,
-      y: 0.5,
-      z: origin.z + direction.z * 22,
+    this.playActorAnim(player, 'Grenade', true);
+    this.lockAnim(player, 0.8);
+    const view = {
+      yaw: player.yaw + this.kickYaw,
+      pitch: clamp(player.pitch + this.kickPitch, -1.35, 1.35),
     };
+    const direction = forwardOf(view);
+    direction.y += 0.22;
+    const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
+    direction.x /= length; direction.y /= length; direction.z /= length;
+    const origin = { x: player.pos.x, y: player.pos.y + 1.5, z: player.pos.z };
     let material = this.materials.get('grenade');
     if (!material) {
-      material = makeMaterial(this.app, { color: [1, 0.5, 0.15], emissive: [1, 0.3, 0.05], opacity: 0.5 });
+      material = makeMaterial(this.app, { color: [0.38, 0.42, 0.32], specular: [0.1, 0.1, 0.1] });
       this.materials.set('grenade', material);
     }
-    const blast = primitive(this.app, 'sphere', [center.x, 1, center.z], [5, 5, 5], 0, material, this.group);
-    setTimeout(() => blast.destroy(), 260);
-    for (const actor of this.actors) {
-      if (!actor.alive) continue;
-      const distance = Math.hypot(actor.pos.x - center.x, actor.pos.z - center.z);
-      if (distance < 8) this.applyDamage(actor, Math.round(90 * (1 - distance / 8)), player);
+    const entity = primitive(
+      this.app, 'capsule', [origin.x, origin.y, origin.z], [0.09, 0.3, 0.09], 0, material, this.group,
+    );
+    this.grenades.push({
+      entity,
+      pos: { ...origin },
+      vel: { x: direction.x * 17, y: direction.y * 17, z: direction.z * 17 },
+      timer: 1.6,
+      owner: player,
+    });
+    this.spawnEffect('muzzle_flash', origin, 0.35, 0.07);
+    this.assets.play('weapons/knife_swing', 0.35);
+    if (this.net.online) {
+      this.net.sendFire({ weapon: 'grenade', x: origin.x, y: origin.y, z: origin.z, dir: direction });
     }
     this.ui.feed('Grenade !', '#ffb14d');
   }
 
+  updateGrenades(dt) {
+    for (let i = this.grenades.length - 1; i >= 0; i -= 1) {
+      const grenade = this.grenades[i];
+      grenade.timer -= dt;
+      grenade.vel.y -= 20 * dt;
+      grenade.pos.x += grenade.vel.x * dt;
+      grenade.pos.y += grenade.vel.y * dt;
+      grenade.pos.z += grenade.vel.z * dt;
+      if (grenade.pos.y <= 0.16) {
+        grenade.pos.y = 0.16;
+        grenade.vel.y = Math.abs(grenade.vel.y) * 0.32;
+        grenade.vel.x *= 0.72;
+        grenade.vel.z *= 0.72;
+      }
+      if (this.world) this.world.resolve(grenade.pos, 0.14);
+      grenade.entity.setPosition(grenade.pos.x, grenade.pos.y, grenade.pos.z);
+      grenade.entity.rotateLocal(220 * dt, 110 * dt, 0);
+      if (grenade.timer <= 0) {
+        this.explodeGrenade(grenade.pos, grenade.owner);
+        grenade.entity.destroy();
+        this.grenades.splice(i, 1);
+      }
+    }
+  }
+
+  explodeGrenade(center, owner) {
+    const position = { x: center.x, y: Math.max(0.3, center.y), z: center.z };
+    this.spawnEffect('impact_ring', position, 6.4, 0.45);
+    this.spawnEffect('spark', position, 2.6, 0.28);
+    for (let i = 0; i < 3; i += 1) {
+      this.spawnEffect('smoke', {
+        x: position.x + rand(-1.2, 1.2), y: position.y + rand(0.2, 1.2), z: position.z + rand(-1.2, 1.2),
+      }, rand(1.2, 2.1), rand(0.7, 1.2));
+    }
+    this.assets.play('fx/explosion', 0.6);
+    this.shake = Math.max(this.shake, 0.9);
+    for (const actor of this.actors) {
+      if (!actor.alive) continue;
+      const distance = Math.hypot(actor.pos.x - position.x, (actor.pos.y + 1) - position.y, actor.pos.z - position.z);
+      const amount = distance <= 4 ? 90 : distance <= 7.5 ? 45 : 0;
+      if (amount) this.applyDamage(actor, amount, owner, { weapon: 'grenade' });
+    }
+  }
+
   toggleVehicle() {
     const player = this.player;
+    if (!player || !player.alive || performance.now() < this.vehicleCooldownUntil) return;
     if (player.driving) {
       const vehicle = player.driving;
+      const side = rightOf(vehicle);
       player.driving = null;
       vehicle.occupant = null;
-      player.pos.x = vehicle.x + 3;
-      player.pos.z = vehicle.z + 2;
-      player.entity.enabled = true;
-      this.ui.feed('À pied');
+      player.pos.x = vehicle.x + side.x * 5.2;
+      player.pos.z = vehicle.z + side.z * 5.2;
+      if (this.world) this.world.resolve(player.pos, 0.85);
+      this.vehicleCooldownUntil = performance.now() + 350;
+      this.syncLocalVisibility();
+      this.playActorAnim(player, 'ExitCar', true);
+      this.lockAnim(player, 0.9);
+      this.ui.feed('À pied — E pour monter', '#4da3ff');
       return;
     }
     let nearest = null;
@@ -414,7 +761,12 @@ export class Game {
     if (!nearest) return;
     nearest.occupant = player;
     player.driving = nearest;
-    player.entity.enabled = false;
+    player.pos.x = nearest.x;
+    player.pos.z = nearest.z;
+    this.vehicleCooldownUntil = performance.now() + 350;
+    this.playActorAnim(player, 'EnterCar', true);
+    this.lockAnim(player, 0.9);
+    this.syncLocalVisibility();
     this.ui.feed('Humvee — ZQSD rouler, E descendre', '#ffcf5c');
   }
 
@@ -429,23 +781,44 @@ export class Game {
     }
     actor.shootTimer = 60 / weapon.rpm;
     if (weapon.key !== 'knife') state.mag -= 1;
+    this.playActorAnim(actor, 'Fire', true);
+    this.lockAnim(actor, 0.2);
     this.assets.play(weapon.sound, actor.isPlayer ? 0.55 : 0.18);
 
-    const direction = forwardOf(actor);
-    const spread = weapon.spread * Math.PI / 180;
+    const view = actor.isPlayer
+      ? { yaw: actor.yaw + this.kickYaw, pitch: clamp(actor.pitch + this.kickPitch, -1.35, 1.35) }
+      : actor;
+    const direction = forwardOf(view);
+    const spread = weapon.spread * (actor.aiming ? 0.35 : 1) * Math.PI / 180;
     direction.x += rand(-spread, spread);
     direction.y += rand(-spread, spread);
     direction.z += rand(-spread, spread);
-    const length = Math.hypot(direction.x, direction.y, direction.z);
+    const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
     direction.x /= length; direction.y /= length; direction.z /= length;
 
     const origin = { x: actor.pos.x, y: actor.pos.y + 1.45, z: actor.pos.z };
     let closest = this.world.raycast(origin, direction, weapon.range);
     let target = null;
+    let headshot = false;
     for (const other of this.actors) {
       if (other === actor || !other.alive) continue;
-      const distance = raySphere(origin, direction, { x: other.pos.x, y: other.pos.y + 1.15, z: other.pos.z }, 0.62);
-      if (distance > 0 && distance < closest) { closest = distance; target = other; }
+      const center = { x: other.pos.x, z: other.pos.z };
+      const headDistance = raySphere(origin, direction, { ...center, y: other.pos.y + 1.45 }, 0.28);
+      const bodyDistance = raySphere(origin, direction, { ...center, y: other.pos.y + 1.15 }, 0.62);
+      let distance = -1;
+      let isHead = false;
+      if (headDistance > 0 && bodyDistance > 0) {
+        if (headDistance <= bodyDistance + 0.25) { distance = headDistance; isHead = true; } else distance = bodyDistance;
+      } else if (headDistance > 0) {
+        distance = headDistance; isHead = true;
+      } else {
+        distance = bodyDistance;
+      }
+      if (distance > 0 && distance < closest) {
+        closest = distance;
+        target = other;
+        headshot = isHead;
+      }
     }
     const end = {
       x: origin.x + direction.x * closest,
@@ -453,19 +826,64 @@ export class Game {
       z: origin.z + direction.z * closest,
     };
     this.spawnTracer(origin, end);
+    if (actor.isPlayer) {
+      this.spawnEffect('muzzle_flash', {
+        x: origin.x + Math.cos(actor.yaw) * 0.32,
+        y: origin.y - 0.12,
+        z: origin.z - Math.sin(actor.yaw) * 0.32,
+      }, actor.aiming ? 0.34 : 0.48, 0.07);
+      this.addRecoil(weapon, actor.aiming);
+      if (this.net.online) this.net.sendFire({ weapon: weapon.key, x: origin.x, y: origin.y, z: origin.z, dir: direction });
+    }
+    if (target) {
+      this.spawnEffect(target === this.player ? 'spark' : 'blood_particle', end, 0.7, 0.22);
+      this.spawnEffect('spark', end, 0.45, 0.16);
+      const damage = Math.max(1, Math.round(weapon.damage * (headshot && weapon.key !== 'knife' ? 1.75 : 1)));
+      if (actor.isPlayer) this.ui.hitmarker(!target.alive || target.hp - damage <= 0);
+      this.applyDamage(target, damage, actor, { weapon: weapon.key, headshot });
+    } else {
+      this.spawnEffect('impact_ring', end, 0.6, 0.18);
+    }
+  }
 
-    if (!target) return;
-    const damage = weapon.damage;
-    if (actor.isPlayer && target.isBot) {
-      this.applyDamage(target, damage, actor);
-      this.ui.hitmarker(target.hp <= 0);
-      if (this.net.online) {
-        this.net.send('shot', { targetId: target.id, damage, weapon: weapon.key });
+  addRecoil(weapon, aiming) {
+    const scale = aiming ? 0.45 : 1;
+    const strength = weapon.key === 'sniper' ? 0.055 : weapon.key === 'pistol' ? 0.024 : 0.017;
+    this.kickPitch += strength * scale;
+    this.kickYaw += rand(-0.4, 0.4) * strength * scale;
+    this.shake = Math.max(this.shake, (weapon.key === 'sniper' ? 0.5 : 0.22) * scale);
+  }
+
+  spawnEffect(type, position, scale, duration) {
+    const path = FX_PATHS[type];
+    if (!path || !this.group) return;
+    let material = this.fxMaterials.get(type);
+    if (!material) {
+      material = makeMaterial(this.app, {
+        texture: this.assets.texture(path), color: [1, 1, 1], emissive: [0.35, 0.35, 0.35],
+        unlit: true, opacity: 0.9,
+      });
+      this.fxMaterials.set(type, material);
+    }
+    const entity = primitive(this.app, 'plane', [position.x, position.y, position.z], [scale, 1, scale], 0, material, this.group);
+    if (this.camera) {
+      entity.lookAt(this.camera.getPosition());
+      entity.rotateLocal(-90, 0, 0);
+    }
+    this.effects.push({ entity, timer: duration, life: duration, scale, kind: type });
+  }
+
+  updateEffects(dt) {
+    for (let i = this.effects.length - 1; i >= 0; i -= 1) {
+      const effect = this.effects[i];
+      effect.timer -= dt;
+      if (effect.timer <= 0) {
+        effect.entity.destroy();
+        this.effects.splice(i, 1);
+        continue;
       }
-    } else if (actor.isPlayer && !target.isBot && this.net.online) {
-      this.net.send('shot', { targetId: target.id, damage, weapon: weapon.key });
-    } else if (actor.isBot && target.isPlayer) {
-      this.applyDamage(target, damage, actor);
+      const ratio = effect.timer / effect.life;
+      effect.entity.setLocalScale(effect.scale * (1 + (1 - ratio) * 0.6), 1, effect.scale * (1 + (1 - ratio) * 0.6));
     }
   }
 
@@ -487,17 +905,26 @@ export class Game {
     this.tracers.push({ entity, timer: 0.07 });
   }
 
-  applyDamage(target, amount, attacker) {
-    if (!target.alive || this.over) return;
+  applyDamage(target, amount, attacker, meta) {
+    if (!target || !target.alive || this.over) return;
+    const info = meta || {};
     let damage = Math.max(1, Math.round(amount));
     if (target.armor > 0) {
-      const absorbed = Math.min(target.armor, damage * 0.5);
+      const absorbed = Math.min(target.armor, damage * 0.6);
       target.armor -= absorbed;
       damage -= absorbed;
     }
     target.hp -= damage;
     target.damageFlash = 1;
-    if (attacker) attacker.damage += damage;
+    this.playActorAnim(target, 'Hit', true);
+    this.lockAnim(target, 0.28);
+    if (attacker && attacker !== target) attacker.damage += damage;
+    if (attacker === this.player && target !== this.player && this.net.online) {
+      const weapon = info.weapon || WEAPONS[this.player.weaponIndex].key;
+      this.net.sendHit({
+        targetId: target.id, weapon, damage: Math.round(damage), headshot: !!info.headshot,
+      });
+    }
     if (target.isPlayer) this.assets.play('player/hurt', 0.5);
     if (target.hp <= 0) this.kill(target, attacker);
   }
@@ -506,7 +933,10 @@ export class Game {
     if (!target.alive) return;
     target.alive = false;
     target.hp = 0;
-    target.entity.enabled = false;
+    this.playActorAnim(target, 'Death', true);
+    if (target.isPlayer) this.syncLocalVisibility();
+    const corpse = target.entity;
+    setTimeout(() => { if (corpse && corpse.parent && !target.alive) corpse.enabled = false; }, 900);
     if (attacker && attacker !== target) attacker.kills += 1;
     if (attacker && attacker.isPlayer) {
       this.ui.feed(`Vous avez éliminé ${target.name}`, '#ffcf5c');
@@ -541,13 +971,16 @@ export class Game {
     this.updateLoot(dt);
     this.updateVehicles(dt);
     this.updateTracers(dt);
+    this.updateGrenades(dt);
+    this.updateEffects(dt);
+    this.updateRecoil(dt);
     this.updateCamera(dt);
     this.updateNetwork(dt);
     this.updateHUD();
   }
 
   updateLook() {
-    const sensitivity = 0.0022;
+    const sensitivity = 0.0007 + clamp(this.sensitivity, 1, 12) * 0.00025;
     const player = this.player;
     const touch = this.ui.touch;
     if (!this.ui.isTouch) {
@@ -562,6 +995,16 @@ export class Game {
       touch.lookY = 0;
     }
     player.pitch = clamp(player.pitch, -1.35, 1.35);
+  }
+
+  updateRecoil(dt) {
+    const decay = Math.exp(-dt * 7);
+    this.kickPitch *= decay;
+    this.kickYaw *= decay;
+    this.shake *= Math.exp(-dt * 9);
+    if (Math.abs(this.kickPitch) < 0.00005) this.kickPitch = 0;
+    if (Math.abs(this.kickYaw) < 0.00005) this.kickYaw = 0;
+    if (this.shake < 0.001) this.shake = 0;
   }
 
   movementInput() {
@@ -585,6 +1028,7 @@ export class Game {
   updatePlayer(dt) {
     const player = this.player;
     if (!player.alive) return;
+    player.animLock = Math.max(0, player.animLock - dt);
     player.shootTimer = Math.max(0, player.shootTimer - dt);
     player.damageFlash = Math.max(0, player.damageFlash - dt * 1.8);
     if (player.reloadTimer > 0) {
@@ -614,7 +1058,7 @@ export class Game {
       player.pos.z = vehicle.z - Math.sin(vehicle.yaw) * -0.5;
       player.yaw = vehicle.yaw;
       player.pitch = 0;
-      if (this.ui.isTouch && this.ui.touch.interact) this.toggleVehicle();
+      this.playActorAnim(player, 'Driving');
       return;
     }
 
@@ -639,7 +1083,6 @@ export class Game {
     if (this.ui.isTouch && this.ui.touch.medkit) this.useMedkit();
     if (this.ui.isTouch && this.ui.touch.grenade) this.useGrenade();
     if (this.ui.isTouch && this.ui.touch.weapon) this.selectWeapon((player.weaponIndex + 1) % WEAPONS.length);
-    if (this.ui.isTouch && this.ui.touch.interact) this.toggleVehicle();
 
     player.speed.y -= 20 * dt;
     player.pos.x += player.speed.x * dt;
@@ -650,6 +1093,23 @@ export class Game {
     player.entity.setPosition(player.pos.x, player.pos.y, player.pos.z);
     player.entity.setEulerAngles(0, player.yaw * 180 / Math.PI, 0);
 
+    const moving = Math.hypot(desiredX, desiredZ) > 0.1;
+    let animation = 'RifleIdle';
+    if (!player.grounded) {
+      animation = player.speed.y > 0.5 ? 'Jump' : 'Falling';
+    } else if (moving) {
+      if (Math.abs(input.x) > Math.abs(input.z)) {
+        animation = input.x > 0 ? 'StrafeRight' : 'StrafeLeft';
+      } else if (input.z < 0) {
+        animation = sprint ? 'RunBackward' : 'WalkBackward';
+      } else {
+        animation = crouch ? 'CrouchWalk' : sprint ? 'Run' : 'Walk';
+      }
+    } else if (player.weaponIndex !== 0) {
+      animation = 'Idle';
+    }
+    this.playActorAnim(player, animation);
+
     const firing = this.mouse.left || (this.ui.isTouch && this.ui.touch.fire);
     const weapon = WEAPONS[player.weaponIndex];
     player.aiming = this.mouse.right || (this.ui.isTouch && this.ui.touch.aim);
@@ -658,17 +1118,32 @@ export class Game {
       this.player.firedOnce = true;
     }
     if (!firing) this.player.firedOnce = false;
-    this.camera.camera.fov += ((player.aiming ? weapon.zoomFov : 74) - this.camera.camera.fov) * Math.min(1, dt * 10);
+    const desiredFov = player.aiming ? weapon.zoomFov : 74;
+    this.camera.camera.fov += (desiredFov - this.camera.camera.fov) * Math.min(1, dt * 10);
+    if (this.viewWeapon) {
+      const target = player.aiming ? -0.02 : 0.3;
+      this.viewWeapon.setLocalPosition(target, player.aiming ? -0.17 : -0.26, -0.42);
+    }
   }
 
   updateBots(dt) {
     for (const bot of this.bots) {
       if (!bot.alive) continue;
+      bot.animLock = Math.max(0, bot.animLock - dt);
       bot.shootTimer = Math.max(0, bot.shootTimer - dt);
+      bot.reloadTimer = Math.max(0, bot.reloadTimer - dt);
       bot.thinkTimer -= dt;
       if (bot.thinkTimer <= 0) {
         bot.thinkTimer = rand(0.8, 2.4);
         bot.waypoint = { x: rand(-160, 160), z: rand(-160, 160) };
+      }
+      const weapon = WEAPONS[bot.weaponIndex];
+      const state = bot.weapons[bot.weaponIndex];
+      if (weapon.key !== 'knife' && state.mag <= 0 && state.reserve > 0 && bot.reloadTimer <= 0) {
+        bot.reloadTimer = weapon.reload;
+        this.playActorAnim(bot, 'Reload', true);
+        this.lockAnim(bot, 0.35);
+        this.assets.play('weapons/reload', 0.18);
       }
       let targetX = bot.waypoint.x;
       let targetZ = bot.waypoint.z;
@@ -679,19 +1154,20 @@ export class Game {
       let target = null;
       let best = 95;
       for (const other of this.actors) {
-        if (!other.alive || other === bot || other.isBot) continue;
+        if (!other.alive || other === bot) continue;
         const distance = dist2(bot.pos, other.pos);
-        if (distance < best) { best = distance; target = other; }
+        const range = other.isBot ? 55 : 95;
+        if (distance < best && distance < range) { best = distance; target = other; }
       }
       if (target) {
         targetX = target.pos.x;
         targetZ = target.pos.z;
         const desiredYaw = Math.atan2(-(targetX - bot.pos.x), -(targetZ - bot.pos.z));
         bot.yaw = this.approachAngle(bot.yaw, desiredYaw, dt * 3.5);
-        if (best < 65 && bot.shootTimer <= 0) {
-          bot.shootTimer = rand(0.6, 1.4);
-          bot.pitch = Math.atan2(1.1 - 1.25, best) * 0.2;
+        if (best < 70 && bot.shootTimer <= 0 && bot.reloadTimer <= 0) {
+          bot.pitch = Math.atan2(1.15 - 1.45, Math.max(1, best));
           this.shoot(bot);
+          bot.shootTimer = rand(0.55, 1.1);
         }
       } else {
         const desiredYaw = Math.atan2(-(targetX - bot.pos.x), -(targetZ - bot.pos.z));
@@ -709,6 +1185,22 @@ export class Game {
       bot.pos.y = 0;
       bot.entity.setPosition(bot.pos.x, bot.pos.y, bot.pos.z);
       bot.entity.setEulerAngles(0, bot.yaw * 180 / Math.PI, 0);
+
+      let animation = target ? 'RifleIdle' : 'Idle';
+      if (distance > 8) {
+        animation = 'Walk';
+        if (target && best < 65) {
+          const targetX = target.pos.x - bot.pos.x;
+          const targetZ = target.pos.z - bot.pos.z;
+          const targetLength = Math.hypot(targetX, targetZ) || 1;
+          const rightX = -targetZ / targetLength;
+          const rightZ = targetX / targetLength;
+          const lateral = Math.abs((dx / distance) * rightX + (dz / distance) * rightZ);
+          const toward = Math.abs((dx / distance) * (targetX / targetLength) + (dz / distance) * (targetZ / targetLength));
+          animation = lateral > toward ? 'Strafe' : 'Run';
+        }
+      }
+      this.playActorAnim(bot, animation);
     }
   }
 
@@ -720,34 +1212,48 @@ export class Game {
   }
 
   updateRemotes(dt) {
-    for (const [id, state] of this.net.players) {
-      if (id === this.net.selfId || !state) continue;
+    if (this.net.online && !this.net.selfId) return;
+    let states = this.remoteStates;
+    if (!states.size && this.net.online && this.net.players && this.net.players.size) states = this.net.players;
+    const selfId = this.net.selfId;
+    const smoothing = 1 - Math.exp(-dt * 12);
+    for (const [rawId, state] of states) {
+      const id = String(rawId);
+      if (!state || id === String(selfId)) continue;
       let actor = this.remotes.get(id);
       if (!actor) {
         actor = this.createActor({
-          id, name: state.name || 'Combattant', tint: state.tint || [0.5, 0.6, 0.8],
-          x: state.x || 0, z: state.z || 0, yaw: state.yaw || 0,
+          id,
+          name: state.name || 'Combattant',
+          tint: resolveTint(state.tint, BOT_TINTS[this.remotes.size % BOT_TINTS.length]),
+          character: state.character || 'char_ch15',
+          x: Number(state.x) || 0,
+          y: Number(state.y) || 0,
+          z: Number(state.z) || 0,
+          yaw: Number(state.yaw) || 0,
         });
         this.remotes.set(id, actor);
       }
-      actor.pos.x += ((state.x || 0) - actor.pos.x) * Math.min(1, dt * 12);
-      actor.pos.z += ((state.z || 0) - actor.pos.z) * Math.min(1, dt * 12);
-      actor.yaw = state.yaw || actor.yaw;
-      actor.pitch = state.pitch || 0;
+      actor.pos.x += ((Number(state.x) || 0) - actor.pos.x) * smoothing;
+      actor.pos.z += ((Number(state.z) || 0) - actor.pos.z) * smoothing;
+      actor.pos.y = Number(state.y) || 0;
+      if (Number.isFinite(state.yaw)) actor.yaw = this.approachAngle(actor.yaw, state.yaw, dt * 8);
+      actor.pitch = Number(state.pitch) || 0;
       actor.alive = state.alive !== false;
       actor.hp = state.hp == null ? actor.hp : state.hp;
       actor.entity.enabled = actor.alive;
-      actor.entity.setPosition(actor.pos.x, 0, actor.pos.z);
+      actor.entity.setPosition(actor.pos.x, actor.pos.y, actor.pos.z);
       actor.entity.setEulerAngles(0, actor.yaw * 180 / Math.PI, 0);
+      this.playActorAnim(actor, actor.alive ? 'RifleIdle' : 'Death');
     }
     for (const [id, actor] of this.remotes) {
-      if (!this.net.players.has(id) || id === this.net.selfId) {
+      if (!states.has(id) && !states.has(Number(id)) || id === String(selfId)) {
         actor.entity.destroy();
         this.actors = this.actors.filter((node) => node !== actor);
         this.remotes.delete(id);
       }
     }
-    if (this.net.selfId && this.player.id !== this.net.selfId) this.player.id = this.net.selfId;
+    if (selfId && this.player && this.player.id !== selfId) this.player.id = selfId;
   }
 
   updateZone(dt) {
@@ -786,7 +1292,7 @@ export class Game {
       for (const actor of this.actors) {
         if (!actor.alive) continue;
         if (Math.hypot(actor.pos.x, actor.pos.z) > this.zoneRadius) {
-          if (actor.isPlayer || actor.isBot) this.applyDamage(actor, ZONE.damage, null);
+          this.applyDamage(actor, actor.isBot ? ZONE.botDamage : ZONE.damage, null, { weapon: 'zone' });
         }
       }
     }
@@ -806,17 +1312,28 @@ export class Game {
       if (!this.player.alive) continue;
       if (dist2(this.player.pos, item) > 1.9) continue;
       if (item.type === 'ammo') {
-        for (const state of this.player.weapons) state.reserve += 40;
-        this.ui.feed('+40 munitions par arme', '#ffcf5c');
+        for (const state of this.player.weapons) state.reserve += 60;
+        this.ui.feed('+60 munitions par arme', '#ffcf5c');
       } else if (item.type === 'medkit') {
-        this.player.medkits += 1;
-        this.ui.feed('+1 trousse de soin [Q]', '#3ddc84');
+        this.player.hp = Math.min(100, this.player.hp + 40);
+        this.ui.feed('+40 points de vie', '#3ddc84');
       } else if (item.type === 'armor') {
         this.player.armor = Math.min(100, this.player.armor + 50);
         this.ui.feed('+50 armure', '#4da3ff');
       } else if (item.type === 'grenade') {
         this.player.grenades += 1;
         this.ui.feed('+1 grenade [G]', '#ffb14d');
+      } else if (item.type === 'weapon') {
+        const index = WEAPONS.findIndex((weapon) => weapon.key === item.weaponKey);
+        if (index >= 0) {
+          const weapon = WEAPONS[index];
+          const state = this.player.weapons[index];
+          this.player.weaponIndex = index;
+          this.player.reloadTimer = 0;
+          state.mag = weapon.magSize;
+          if (weapon.reserve) state.reserve = Math.max(state.reserve, weapon.reserve);
+          this.ui.feed(`${weapon.name} récupéré`, '#d9e8ff');
+        }
       }
       this.assets.play('ui/notify', 0.3);
       item.entity.destroy();
@@ -825,17 +1342,25 @@ export class Game {
   }
 
   updateVehicles(dt) {
+    const player = this.player;
+    if (!player || !player.alive) {
+      this.interactHeld = false;
+      this.ui.showVehicleHint('');
+      return;
+    }
+    const touchInteract = !!(this.ui.isTouch && this.ui.touch.interact);
+    if (touchInteract && !this.interactHeld) this.toggleVehicle();
+    this.interactHeld = touchInteract;
+    if (player.driving) {
+      this.ui.showVehicleHint('E / INTERAGIR — DESCENDRE DU HUMVEE');
+      return;
+    }
+    let near = false;
     for (const vehicle of this.vehicles) {
       if (vehicle.occupant) continue;
-      if (!this.player.alive || this.player.driving) continue;
-      if (dist2(this.player.pos, vehicle) < 4.5) {
-        this.ui.showVehicleHint('E — MONTER À BORD DU HUMVEE');
-        if (this.keys.KeyE || (this.ui.isTouch && this.ui.touch.interact)) this.toggleVehicle();
-      }
+      if (dist2(player.pos, vehicle) < 4.5) { near = true; break; }
     }
-    if (!this.player.driving && !(this.player.alive && this.vehicles.some((v) => !v.occupant && dist2(this.player.pos, v) < 4.5))) {
-      this.ui.showVehicleHint('');
-    }
+    this.ui.showVehicleHint(near ? 'E / INTERAGIR — MONTER À BORD DU HUMVEE' : '');
   }
 
   updateTracers(dt) {
@@ -849,30 +1374,80 @@ export class Game {
   }
 
   updateCamera(dt) {
-    if (!this.camera) return;
+    if (!this.camera || !this.player) return;
     const player = this.player;
-    if (!player) return;
+    const pitch = clamp(player.pitch + this.kickPitch, -1.35, 1.35);
+    const yaw = player.yaw + this.kickYaw;
+    const shakeX = this.shake ? rand(-this.shake, this.shake) * 0.08 : 0;
+    const shakeY = this.shake ? rand(-this.shake, this.shake) * 0.08 : 0;
+    const shakeZ = this.shake ? rand(-this.shake, this.shake) * 0.08 : 0;
+
     if (player.driving) {
-      this.camera.setPosition(player.pos.x, 2.6, player.pos.z);
-      this.camera.setEulerAngles(-5, player.yaw * 180 / Math.PI, 0);
-      return;
+      const vehicleYaw = player.driving.yaw;
+      this.camera.setPosition(
+        player.pos.x + Math.sin(vehicleYaw) * 7.6 + shakeX,
+        3.15 + shakeY,
+        player.pos.z + Math.cos(vehicleYaw) * 7.6 + shakeZ,
+      );
+      this.camera.camera.fov = this.zoomed ? 35 : 62;
+      this.camera.setEulerAngles(-5, vehicleYaw * 180 / Math.PI, 0);
+    } else if (this.cameraMode === 'fps') {
+      this.camera.setPosition(
+        player.pos.x + shakeX,
+        player.pos.y + 1.62 + shakeY,
+        player.pos.z + shakeZ,
+      );
+      this.camera.setEulerAngles(pitch * 180 / Math.PI, yaw * 180 / Math.PI, 0);
+    } else {
+      const forward = {
+        x: -Math.sin(yaw) * Math.cos(pitch),
+        y: Math.sin(pitch),
+        z: -Math.cos(yaw) * Math.cos(pitch),
+      };
+      const right = { x: Math.cos(yaw), y: 0, z: -Math.sin(yaw) };
+      const shoulder = player.aiming ? 0.25 : 0.55;
+      const pivot = {
+        x: player.pos.x + right.x * shoulder,
+        y: player.pos.y + 1.62,
+        z: player.pos.z + right.z * shoulder,
+      };
+      const distance = player.aiming ? 1.85 : 3.1;
+      let travel = distance;
+      if (this.world) {
+        const hit = this.world.raycast(pivot, { x: -forward.x, y: -forward.y, z: -forward.z }, distance);
+        if (hit < distance) travel = Math.max(0.35, hit - 0.2);
+      }
+      this.camera.setPosition(
+        pivot.x - forward.x * travel + shakeX,
+        pivot.y - forward.y * travel + 0.22 + shakeY,
+        pivot.z - forward.z * travel + shakeZ,
+      );
+      this.camera.lookAt(
+        pivot.x + forward.x * 25,
+        pivot.y + forward.y * 25 + 0.05,
+        pivot.z + forward.z * 25,
+      );
     }
-    const height = player.pos.y + 1.62;
-    this.camera.setPosition(player.pos.x, height, player.pos.z);
-    this.camera.setEulerAngles(player.pitch * 180 / Math.PI, player.yaw * 180 / Math.PI, 0);
+
     this.minimapTimer = (this.minimapTimer || 0) - dt;
     if (this.minimapTimer <= 0) {
-      this.minimapTimer = 0.1;
-      this.ui.minimap(this.layout, this.player, { x: 0, z: 0, radius: this.zoneRadius }, this.remotes.size ? Array.from(this.remotes.values()) : this.bots);
+      this.minimapTimer = 0.05;
+      this.ui.minimap(
+        this.layout,
+        this.player,
+        { x: 0, z: 0, radius: this.zoneRadius },
+        Array.from(this.remotes.values()).concat(this.bots),
+        { loot: this.loot, vehicles: this.vehicles, landmarks: this.world ? this.world.landmarks : [] },
+      );
     }
   }
 
   updateNetwork(dt) {
-    if (!this.net.online || !this.player.alive) return;
+    if (!this.net || !this.net.online || !this.player || !this.player.alive) return;
     this.networkTimer = (this.networkTimer || 0) - dt;
     if (this.networkTimer > 0) return;
-    this.networkTimer = this.quality.networkRate;
-    this.net.send('state', {
+    this.networkTimer = this.networkInterval;
+    const state = {
       x: this.player.pos.x,
       y: this.player.pos.y,
       z: this.player.pos.z,
@@ -882,29 +1457,224 @@ export class Game {
       alive: this.player.alive,
       name: this.player.name,
       tint: this.player.tint,
-    });
+      character: resolveCharacter(this.player.character),
+    };
+    if (this.netInfo.roomId) state.roomId = this.netInfo.roomId;
+    if (this.netInfo.mode) state.mode = this.netInfo.mode;
+    if (this.netInfo.map) state.map = this.netInfo.map;
+    if (typeof this.net.sendState === 'function') this.net.sendState(state);
+    else this.net.send('state', state);
+  }
+
+  installNetHooks() {
+    if (!this.net || !this.net.handlers || this.netHooksInstalled) return;
+    this.netHooksInstalled = true;
+    const handlers = this.net.handlers;
+    const wrap = (name, callback) => {
+      const original = handlers[name];
+      handlers[name] = (...args) => {
+        callback(...args);
+        if (original) original(...args);
+      };
+    };
+    wrap('onWorld', (message) => this.acceptWorldMessage(message));
+    wrap('onSnapshot', (message) => this.acceptWorldMessage(message));
+    const originalStart = handlers.onMatchStart;
+    handlers.onMatchStart = (message) => {
+      const result = originalStart ? originalStart(message) : null;
+      Promise.resolve(result).then(() => this.onMatchStart(message));
+    };
+    wrap('onMatchEnd', (message) => this.onMatchEnd(message));
+    wrap('onLobby', (message) => this.setLobbyState(message));
+    wrap('onWelcome', (message) => this.setNetInfo(message));
+  }
+
+  acceptWorldMessage(message) {
+    if (!message || message === this.lastWorldMessage) return;
+    this.lastWorldMessage = message;
+    this.applyNetworkPlayers(message.players, message.zone);
+  }
+
+  applyNetworkPlayers(players, zone) {
+    let source = null;
+    if (players instanceof Map) source = Array.from(players.values());
+    else if (Array.isArray(players)) source = players;
+    else if (players && typeof players === 'object') {
+      source = Object.keys(players).map((key) => {
+        const value = players[key] || {};
+        return { ...value, id: value.id || key };
+      });
+    }
+    if (source) {
+      this.remoteStates = new Map();
+      for (const state of source) {
+        if (!state || !state.id) continue;
+        this.remoteStates.set(String(state.id), state);
+      }
+    }
+    if (zone) this.applyZoneState(zone);
+  }
+
+  applyZoneState(zone) {
+    if (!zone || typeof zone !== 'object') return;
+    if (Number.isFinite(zone.radius)) this.zoneRadius = zone.radius;
+    if (Number.isFinite(zone.target)) this.zoneTarget = zone.target;
+    if (Number.isFinite(zone.hold)) this.zoneHold = zone.hold;
+    if (Number.isFinite(zone.phase)) this.zonePhase = zone.phase;
+    this.zoneShrinking = !!zone.shrinking;
+  }
+
+  onMatchStart(data) {
+    const message = data || {};
+    this.setNetInfo(message);
+    this.pendingMatchStart = message;
+    this.lastWorldMessage = null;
+    if (!this.player || !this.group || !this.running) return;
+    this.pendingMatchStart = null;
+    if (message.map && MAPS[message.map]) this.mapDef = MAPS[message.map];
+    if (message.mode && MODES[message.mode]) {
+      this.modeDef = MODES[message.mode];
+      this.zoneEnabled = this.modeDef.zone;
+    }
+    this.applyNetworkPlayers(message.players, message.zone);
+  }
+
+  onMatchEnd(data) {
+    const message = data || {};
+    this.serverRecorded = true;
+    this.setNetInfo(message);
+    if (this.over) return;
+    const results = Array.isArray(message.results) ? message.results : [];
+    const self = results.find((entry) => String(entry.id) === String(this.player && this.player.id));
+    const victory = !!self && self.placement === 1;
+    const placement = self && self.placement ? self.placement : 99;
+    const duration = Number(message.duration) || Math.floor((performance.now() - this.matchStart) / 1000);
+    const board = results.map((entry) => ({
+      name: entry.name || 'Combattant',
+      placement: entry.placement || 0,
+      kills: entry.kills || 0,
+      self: String(entry.id) === String(this.player && this.player.id),
+    })).sort((a, b) => a.placement - b.placement || b.kills - a.kills);
+    const payload = {
+      mode: MODES[message.mode] ? message.mode : (this.selection && this.selection.mode) || 'solo',
+      map: MAPS[message.map] ? message.map : (this.selection && this.selection.map) || 'forest',
+      winner: victory ? 'player' : 'bots',
+      players: results.map((entry) => ({
+        name: entry.name || 'Combattant',
+        kills: entry.kills || 0,
+        damage: Math.round(entry.damage || 0),
+        placement: entry.placement || 0,
+        isBot: false,
+      })),
+      startedAt: this.startedAt || Date.now() - duration * 1000,
+    };
+    if (!payload.players.length && this.player) {
+      payload.players.push({
+        name: this.player.name, kills: this.player.kills,
+        damage: Math.round(this.player.damage), placement, isBot: false,
+      });
+    }
+    this.lastResult = { payload, victory, placement, duration, server: true };
+    this.showResults({
+      victory,
+      placement,
+      kills: self ? self.kills || 0 : this.player ? this.player.kills : 0,
+      damage: self ? Math.round(self.damage || 0) : this.player ? Math.round(this.player.damage) : 0,
+      duration: this.formatTime(duration),
+      map: MAPS[message.map] ? message.map : (this.selection && this.selection.map) || 'forest',
+      mode: MODES[message.mode] ? message.mode : (this.selection && this.selection.mode) || 'solo',
+      board: board.length ? board : (this.player ? [{
+        name: this.player.name, placement, kills: this.player.kills, self: true,
+      }] : []),
+    }, victory);
+    this.stop();
+    this.over = true;
+  }
+
+  showResults(view, victory) {
+    this.assets.play(victory ? 'battle-royale/victory' : 'battle-royale/defeat', 0.7);
+    this.assets.startMusic('music/menu_theme');
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.ui.showHUD(false);
+    this.ui.results(view);
   }
 
   onNetworkEvent(event, data) {
-    if (event === 'hit') {
-      const target = this.actors.find((actor) => actor.id === data.targetId);
-      if (target && target !== this.player) this.applyDamage(target, data.damage, null);
-      if (data.targetId === this.player.id) this.applyDamage(this.player, data.damage, null);
-    } else if (event === 'shot') {
-      const actor = this.actors.find((node) => node.id === data.shooterId);
-      if (actor && data.dir) {
-        this.spawnTracer(
-          { x: actor.pos.x, y: actor.pos.y + 1.45, z: actor.pos.z },
-          { x: actor.pos.x + data.dir.x * 60, y: actor.pos.y + 1.45 + data.dir.y * 60, z: actor.pos.z + data.dir.z * 60 },
-        );
-      }
-    } else if (event === 'chat') {
-      this.ui.feed(`${data.name}: ${data.text}`);
-    } else if (event === 'join') {
-      this.ui.feed(`${data.name} a rejoint la partie`, '#4da3ff');
-    } else if (event === 'leave') {
-      this.ui.feed(`${data.name} a quitté la partie`);
+    const payload = data || {};
+    if (event === 'worldState' || event === 'snapshot') {
+      this.acceptWorldMessage(payload);
+      return;
     }
+    if (event === 'event') {
+      const nested = payload.event || payload.type;
+      if (nested) this.onNetworkEvent(nested, payload.data || payload);
+      return;
+    }
+    if (event === 'hit') {
+      const target = this.actors.find((actor) => String(actor.id) === String(payload.targetId));
+      const hp = Number(payload.hp);
+      const point = target
+        ? { x: target.pos.x, y: target.pos.y + 1.4, z: target.pos.z }
+        : { x: Number(payload.x) || 0, y: Number(payload.y) || 1.4, z: Number(payload.z) || 0 };
+      this.spawnEffect('blood_particle', point, 0.7, 0.22);
+      if (target && target !== this.player && Number.isFinite(hp)) target.hp = hp;
+      if (target && target === this.player) {
+        if (Number.isFinite(hp)) this.player.hp = hp;
+        this.player.damageFlash = 1;
+        this.assets.play('player/hurt', 0.5);
+      }
+      return;
+    }
+    if (event === 'shot') {
+      const shooter = this.actors.find((actor) => String(actor.id) === String(payload.shooterId));
+      const dir = payload.dir;
+      if (dir && Number.isFinite(dir.x) && Number.isFinite(dir.y) && Number.isFinite(dir.z)) {
+        const origin = Number.isFinite(payload.x)
+          ? { x: payload.x, y: (Number(payload.y) || 0) + 1.45, z: payload.z }
+          : { x: shooter ? shooter.pos.x : 0, y: shooter ? shooter.pos.y + 1.45 : 1.45, z: shooter ? shooter.pos.z : 0 };
+        const length = Math.hypot(dir.x, dir.y, dir.z) || 1;
+        this.spawnTracer(origin, {
+          x: origin.x + dir.x / length * 60,
+          y: origin.y + dir.y / length * 60,
+          z: origin.z + dir.z / length * 60,
+        });
+      }
+      return;
+    }
+    if (event === 'death' || event === 'kill') {
+      const target = this.actors.find((actor) => String(actor.id) === String(payload.targetId));
+      if (target && target !== this.player) {
+        target.alive = false;
+        target.hp = 0;
+        this.playActorAnim(target, 'Death', true);
+        const entity = target.entity;
+        setTimeout(() => { if (entity && entity.parent) entity.enabled = false; }, 900);
+      } else if (target === this.player) {
+        this.player.alive = false;
+        this.player.hp = 0;
+        this.syncLocalVisibility();
+      }
+      if (payload.killer) this.ui.feed(`${payload.killer} → ${payload.victim || 'cible'}`, '#ff8a8a');
+      return;
+    }
+    if (event === 'chat' || event === 'playerChat') {
+      if (payload.name && payload.text) this.ui.feed(`${payload.name}: ${payload.text}`);
+      return;
+    }
+    if (event === 'join' || event === 'playerJoined') {
+      this.ui.feed(`${payload.name || 'Combattant'} a rejoint la partie`, '#4da3ff');
+      return;
+    }
+    if (event === 'leave' || event === 'playerLeft' || event === 'playerDisconnected') {
+      this.ui.feed(`${payload.name || 'Combattant'} a quitté la partie`);
+      return;
+    }
+    if (event === 'zone') {
+      this.applyZoneState(payload);
+      this.ui.banner(payload.shrinking ? 'LA ZONE SE RESSERRE' : 'NOUVEAU CERCLE', 2.2);
+      return;
+    }
+    if (event === 'matchEnd') this.onMatchEnd(payload);
   }
 
   updateHUD() {
@@ -937,14 +1707,40 @@ export class Game {
   showVehicleHint(text) { this.ui.pendingVehicleHint = text; }
 
   endMatch(victory, placement) {
-    if (this.over) return;
+    if (this.over || !this.player) return;
     this.over = true;
     const duration = Math.floor((performance.now() - this.matchStart) / 1000);
-    this.assets.play(victory ? 'battle-royale/victory' : 'battle-royale/defeat', 0.7);
-    this.assets.startMusic('music/menu_theme');
-    if (document.pointerLockElement) document.exitPointerLock();
-    this.ui.showHUD(false);
-    this.ui.results({
+    const playerEntry = {
+      name: this.player.name,
+      kills: this.player.kills,
+      damage: Math.round(this.player.damage),
+      placement,
+      isBot: false,
+    };
+    const bots = this.bots.map((bot) => ({
+      name: bot.name,
+      kills: bot.kills,
+      damage: Math.round(bot.damage),
+      placement: 0,
+      isBot: true,
+    })).sort((a, b) => b.kills - a.kills || b.damage - a.damage);
+    let nextPlacement = 1;
+    for (const bot of bots) {
+      while (nextPlacement === placement) nextPlacement += 1;
+      bot.placement = nextPlacement;
+      nextPlacement += 1;
+    }
+    const ranked = [playerEntry, ...bots];
+    const payload = {
+      mode: this.selection.mode,
+      map: this.selection.map,
+      winner: victory ? 'player' : 'bots',
+      players: ranked.map((entry) => ({ ...entry })),
+      startedAt: this.startedAt || Date.now() - duration * 1000,
+    };
+    this.lastResult = { payload, victory, placement, duration };
+    this.recordMatch(payload);
+    this.showResults({
       victory,
       placement,
       kills: this.player.kills,
@@ -952,11 +1748,34 @@ export class Game {
       duration: this.formatTime(duration),
       map: this.selection.map,
       mode: this.selection.mode,
-      board: this.actors
-        .filter((actor) => actor.id !== 'local')
-        .map((actor) => ({ name: actor.name, placement: actor.alive ? 1 : 2, kills: actor.kills, self: false }))
-        .concat([{ name: this.player.name, placement, kills: this.player.kills, self: true }])
-        .sort((a, b) => a.placement - b.placement || b.kills - a.kills),
-    });
+      board: ranked.map((entry) => ({
+        name: entry.name, placement: entry.placement, kills: entry.kills, self: !entry.isBot,
+      })).sort((a, b) => a.placement - b.placement || b.kills - a.kills),
+    }, victory);
+  }
+
+  recordMatch(payload) {
+    if (this.matchRecorded || this.serverRecorded) return;
+    if (this.net && this.net.phase === 'finished') return;
+    if (typeof Session.token !== 'function' || !Session.token()) return;
+    this.matchRecorded = true;
+    let request;
+    try {
+      request = Api.recordMatch(payload);
+    } catch (error) {
+      return;
+    }
+    Promise.resolve(request).then((response) => {
+      if (!this.lastResult) return;
+      this.lastResult.response = response;
+      const data = response && response.data ? response.data : {};
+      const rewards = data.rewards || data.reward || data.gains || {};
+      const xp = Number(data.xp != null ? data.xp : rewards.xp);
+      const credits = Number(data.credits != null ? data.credits : rewards.credits);
+      let text = '';
+      if (Number.isFinite(xp) && xp) text += `+${xp} XP`;
+      if (Number.isFinite(credits) && credits) text += `${text ? ' · ' : ''}+${credits} crédits`;
+      if (text && this.ui && typeof this.ui.toast === 'function') this.ui.toast(text, 3);
+    }).catch(() => {});
   }
 }

@@ -11,6 +11,7 @@ export const ZONE = {
   shrink: 0.06,
   factor: 0.62,
   damage: 6,
+  botDamage: 7,
 };
 
 export const QUALITY_LEVELS = {
@@ -19,21 +20,25 @@ export const QUALITY_LEVELS = {
     pixelRatio: 1,
     msaa: false,
     shadows: false,
-    fogEnd: 230,
-    trees: 70,
-    props: 70,
-    buildings: 12,
+    fogEnd: 260,
+    trees: 90,
+    props: 90,
+    buildings: 14,
     bots: 5,
     maxFps: 30,
     networkRate: 0.12,
-    textureDetail: false,
+    textureDetail: true,
+    anisotropy: 2,
+    sunIntensity: 1.2,
+    exact: { tree: 270, deadTree: 30, stump: 20, shrub: 70, fern: 45, rock: 40, crate: 24, building: 45 },
+    exactLoot: 56,
   },
   medium: {
     label: 'Moyenne',
     pixelRatio: 1.25,
     msaa: false,
     shadows: false,
-    fogEnd: 340,
+    fogEnd: 360,
     trees: 150,
     props: 140,
     buildings: 22,
@@ -41,6 +46,10 @@ export const QUALITY_LEVELS = {
     maxFps: 45,
     networkRate: 0.08,
     textureDetail: true,
+    anisotropy: 4,
+    sunIntensity: 1.35,
+    exact: { tree: 390, deadTree: 55, stump: 40, shrub: 130, fern: 90, rock: 70, crate: 48, building: 75 },
+    exactLoot: 84,
   },
   high: {
     label: 'Haute',
@@ -55,6 +64,10 @@ export const QUALITY_LEVELS = {
     maxFps: 60,
     networkRate: 0.05,
     textureDetail: true,
+    anisotropy: 8,
+    sunIntensity: 1.5,
+    exact: { tree: 999, deadTree: 999, stump: 999, shrub: 999, fern: 999, rock: 999, crate: 999, building: 999 },
+    exactLoot: 112,
   },
 };
 
@@ -75,8 +88,8 @@ export const MAPS = {
     desc: 'Forêt dense, collines et ruines. Idéale pour les embuscades.',
     biome: 'forest',
     minimap: 'assets/maps/forest-minimap.png',
-    sky: [0.17, 0.25, 0.20],
-    fog: [0.27, 0.31, 0.25],
+    sky: [0.169, 0.247, 0.200],
+    fog: [0.275, 0.314, 0.243],
     ground: 'assets/textures/grass_albedo.png',
   },
   city: {
@@ -86,8 +99,8 @@ export const MAPS = {
     desc: 'Blocs urbains, rues ouvertes et toits praticables. Combat vertical.',
     biome: 'urban',
     minimap: 'assets/maps/city-minimap.png',
-    sky: [0.24, 0.32, 0.40],
-    fog: [0.35, 0.34, 0.30],
+    sky: [0.239, 0.322, 0.400],
+    fog: [0.353, 0.337, 0.298],
     ground: 'assets/textures/asphalt_albedo.png',
   },
 };
@@ -126,6 +139,29 @@ export const BOT_TINTS = [
   [0.60, 0.42, 0.77], [0.42, 0.77, 0.49], [0.77, 0.49, 0.66], [0.49, 0.77, 0.77],
 ];
 
+export const SKIN_TINTS = {
+  skin_recruit: [0.95, 0.72, 0.32],
+  skin_jungle: [0.42, 0.72, 0.38],
+  skin_ghost: [0.58, 0.64, 0.72],
+  skin_phoenix: [1, 0.42, 0.18],
+};
+
+export const FX_PATHS = {
+  impact_ring: 'assets/effects/impact_ring.png',
+  spark: 'assets/effects/spark.png',
+  blood_particle: 'assets/effects/blood_particle.png',
+  muzzle_flash: 'assets/effects/muzzle_flash.png',
+  smoke: 'assets/effects/smoke_particle.png',
+};
+
+export const CHARACTER_MODELS = {
+  char_ch15: 'assets/models/characters/hero_ch15.glb',
+  char_dying: 'assets/models/characters/hero_dying.glb',
+  char_dying1: 'assets/models/characters/hero_dying1.glb',
+  char_archer: 'assets/models/characters/hero_archer.glb',
+  char_kaya: 'assets/models/characters/hero_kaya.glb',
+};
+
 export const AUDIO_PATHS = {
   'ui/click': 'assets/audio/interface/click.wav',
   'ui/hover': 'assets/audio/interface/hover.wav',
@@ -138,6 +174,7 @@ export const AUDIO_PATHS = {
   'weapons/knife_swing': 'assets/audio/weapons/knife_swing.wav',
   'weapons/reload': 'assets/audio/weapons/reload.wav',
   'weapons/empty_click': 'assets/audio/weapons/empty_click.wav',
+  'fx/explosion': 'assets/audio/weapons/shotgun.wav',
   'player/hurt': 'assets/audio/player/hurt.wav',
   'player/heal': 'assets/audio/player/heal.wav',
   'player/footstep_grass': 'assets/audio/player/footstep_grass.wav',
