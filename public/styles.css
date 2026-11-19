@@ -72,12 +72,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .bar-armor em{position:absolute;right:4px;top:-3px;font-size:8px;font-style:normal;color:#bcd9ff;letter-spacing:.14em}
 .feed{margin-top:10px;display:flex;flex-direction:column;gap:4px;max-width:330px}
 .feed div{background:rgba(10,13,17,.72);border-left:2px solid var(--gold);padding:5px 9px;border-radius:0 6px 6px 0;font-size:11px}
-.zone-label{position:absolute;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);font-family:Oswald,sans-serif;font-size:16px;letter-spacing:.1em;color:var(--gold);text-shadow:0 2px 6px #000;white-space:nowrap}
-.zone-label.danger{color:#ff6b5e;animation:pulse 1s infinite}
-@keyframes pulse{50%{opacity:.45}}
 .hud-top-right{position:absolute;top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));display:flex;flex-direction:column;text-align:right;min-width:160px}
 .hud-top-right strong{font-family:Oswald,sans-serif;letter-spacing:.08em;color:var(--gold)}
 .hud-top-right span{font-size:11px;color:var(--muted)}
+.compass{position:absolute;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:6px 14px;border:1px solid rgba(255,207,92,.28);border-radius:999px;background:linear-gradient(90deg,rgba(10,13,17,.5),rgba(10,13,17,.92),rgba(10,13,17,.5));box-shadow:0 4px 18px rgba(0,0,0,.35);white-space:nowrap;pointer-events:none}
+.compass-side{font-family:Oswald,sans-serif;font-size:11px;letter-spacing:.16em;color:rgba(255,255,255,.55)}
+.compass-main{display:flex;align-items:baseline;gap:7px}
+.compass-main strong{font-family:Oswald,sans-serif;font-size:19px;letter-spacing:.1em;color:var(--gold)}
+.compass-main span{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .hud-bottom-right{position:absolute;bottom:max(18px,env(safe-area-inset-bottom));right:max(14px,env(safe-area-inset-right));text-align:right;min-width:200px}
 .weapon-name{display:block;font-size:12px;color:var(--gold)}
 .ammo{display:block;font-family:Oswald,sans-serif;font-size:34px;line-height:1.1}
@@ -138,10 +140,15 @@ body.touch .hud-bottom-right{bottom:max(84px,env(safe-area-inset-bottom))}
   .ammo{font-size:26px}
   .slots{display:none}
   .minimap-frame{width:104px;height:104px}
-  .zone-label{font-size:12px}
+  .compass{gap:7px;padding:5px 10px}
+  .compass-main strong{font-size:15px}
+  .compass-side{font-size:9px}
   .hud-top-right{min-width:120px}
   .hud-top-right strong{font-size:12px}
   .items{gap:8px}
+}
+@media (max-width:520px){
+  .compass{top:max(72px,env(safe-area-inset-top))}
 }
 @media (max-height:520px){
   .menu-wrap{padding-bottom:12px}

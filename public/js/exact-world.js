@@ -2,6 +2,10 @@ import { GodotRandom } from './rng.js';
 
 const TAU = Math.PI * 2;
 const MAP_SIZE = 760;
+const HOUSE = 'procedural-house';
+const DEG = (value) => value * Math.PI / 180;
+const WALL_RADIUS = 0.58;
+const WALL_STEP = 1.1;
 
 const FOREST = {
   trees1: 'assets/polyhaven/quiver_tree_01/quiver_tree_01_1k.gltf',
@@ -41,6 +45,7 @@ const PROP_TYPES = {
 };
 
 function typeOf(path) {
+  if (path === HOUSE) return 'building';
   const file = path.split('/').pop();
   const name = file.replace(/\.[^.]+$/, '');
   if (file.indexOf('building-') === 0 || file.indexOf('house_') === 0 || file === 'shed.glb') return 'building';
@@ -94,8 +99,9 @@ function placeProp(props, colliders, path, count, minScale, maxScale, randomRota
     const rotationY = randomRotation ? rng.randfRange(0, TAU) : 0;
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
-    pushProp(props, path, x, groundOffset(path, scale), z, scale, rotationY);
     const collider = colliderFor(path, x, z, scale);
+    if (collider && colliders.some((other) => Math.hypot(other.x - x, other.z - z) < other.r + collider.r + 1)) continue;
+    pushProp(props, path, x, groundOffset(path, scale), z, scale, rotationY);
     if (collider) colliders.push(collider);
     placed += 1;
   }
@@ -108,6 +114,48 @@ function placeStatic(props, colliders, path, x, y, z, scale, rotationDeg, collis
 
 function addLandmark(landmarks, x, z, type, name) {
   landmarks.push({ x, z, type, name });
+}
+
+function addEnterableHouse(props, colliders, landmarks, options) {
+  const { x, z, rotation, width, depth, height, name, tint, roofTint } = options;
+  const door = Math.min(2.8, width * 0.34);
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const toWorld = (lx, lz) => ({ x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos });
+  props.push({
+    path: HOUSE,
+    type: 'building',
+    x,
+    y: 0,
+    z,
+    scale: 1,
+    rotationY: rotation,
+    interior: { width, depth, height, door, tint, roofTint },
+  });
+  const addWall = (ax, az, bx, bz) => {
+    const length = Math.hypot(bx - ax, bz - az);
+    const steps = Math.max(1, Math.ceil(length / WALL_STEP));
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const point = toWorld(ax + (bx - ax) * t, az + (bz - az) * t);
+      colliders.push({ x: point.x, z: point.z, r: WALL_RADIUS, h: height });
+    }
+  };
+  addWall(-width / 2, depth / 2, width / 2, depth / 2);
+  addWall(-width / 2, -depth / 2, -width / 2, depth / 2);
+  addWall(width / 2, -depth / 2, width / 2, depth / 2);
+  addWall(-width / 2, -depth / 2, -door / 2, -depth / 2);
+  addWall(door / 2, -depth / 2, width / 2, -depth / 2);
+  const furniture = [
+    [0, depth * 0.16, 1.2],
+    [width * 0.28, -depth * 0.2, 1],
+    [-width * 0.28, depth * 0.22, 0.8],
+  ];
+  for (const [lx, lz, radius] of furniture) {
+    const point = toWorld(lx, lz);
+    colliders.push({ x: point.x, z: point.z, r: radius, h: 1.2 });
+  }
+  if (name) addLandmark(landmarks, x, z, 'house', name);
 }
 
 function scatterCrates(props, colliders, count, radius, limits) {
@@ -132,25 +180,24 @@ function scatterCrates(props, colliders, count, radius, limits) {
 
 function placeForestLandmarks(props, colliders, landmarks, limits) {
   const buildings = [
-    { path: FOREST.shed, x: -60, z: 40, y: 0, scale: 1, rotation: 30, r: 2.6, h: 3.2, name: 'Abri du Nord' },
-    { path: FOREST.shed, x: 80, z: -70, y: 0, scale: 1, rotation: 140, r: 2.6, h: 3.2, name: 'Abri de la Route' },
-    { path: FOREST.shed, x: 12, z: -184, y: 0, scale: 1, rotation: 75, r: 2.6, h: 3.2, name: 'Relais Sud' },
-    { path: FOREST.house3, x: 30, z: 90, y: 0, scale: 0.01, rotation: 45, r: 4.5, h: 12.8, name: 'Maison du Ruisseau' },
-    { path: FOREST.house3, x: -110, z: -60, y: 0, scale: 0.01, rotation: 200, r: 4.5, h: 12.8, name: 'Ferme Ouest' },
-    { path: FOREST.house3, x: -150, z: 120, y: 0, scale: 0.01, rotation: 35, r: 4.5, h: 12.8, name: 'Ferme du Nord' },
-    { path: FOREST.house3, x: 120, z: -130, y: 0, scale: 0.01, rotation: 285, r: 4.5, h: 12.8, name: 'Chasseur Solitaire' },
-    { path: FOREST.house4, x: 140, z: 30, y: 0, scale: 0.01, rotation: 110, r: 5, h: 14.6, name: 'Tour de Thalvorn' },
-    { path: FOREST.house4, x: -20, z: 220, y: 0, scale: 0.01, rotation: 320, r: 5, h: 14.6, name: 'Tour de la Colline' },
-    { path: FOREST.house4, x: 200, z: 120, y: 0, scale: 0.01, rotation: 65, r: 5, h: 14.6, name: 'Poste de Mireval' },
+    { x: -60, z: 40, width: 6, depth: 6, height: 3.2, rotation: 30, name: 'Abri du Nord', tint: [0.52, 0.43, 0.31] },
+    { x: 80, z: -70, width: 6, depth: 6, height: 3.2, rotation: 140, name: 'Abri de la Route', tint: [0.52, 0.43, 0.31] },
+    { x: 12, z: -184, width: 6, depth: 6, height: 3.2, rotation: 75, name: 'Relais Sud', tint: [0.52, 0.43, 0.31] },
+    { x: 30, z: 90, width: 8.8, depth: 9, height: 5.4, rotation: 45, name: 'Maison du Ruisseau', tint: [0.62, 0.49, 0.36] },
+    { x: -110, z: -60, width: 8.8, depth: 9, height: 5.4, rotation: 200, name: 'Ferme Ouest', tint: [0.66, 0.52, 0.36] },
+    { x: -150, z: 120, width: 8.8, depth: 9, height: 5.4, rotation: 35, name: 'Ferme du Nord', tint: [0.58, 0.46, 0.35] },
+    { x: 120, z: -130, width: 8.8, depth: 9, height: 5.4, rotation: 285, name: 'Chasseur Solitaire', tint: [0.6, 0.45, 0.32] },
+    { x: 140, z: 30, width: 10.5, depth: 11, height: 7.2, rotation: 110, name: 'Tour de Thalvorn', tint: [0.55, 0.5, 0.46] },
+    { x: -20, z: 220, width: 10.5, depth: 11, height: 7.2, rotation: 320, name: 'Tour de la Colline', tint: [0.52, 0.49, 0.44] },
+    { x: 200, z: 120, width: 10.5, depth: 11, height: 7.2, rotation: 65, name: 'Poste de Mireval', tint: [0.57, 0.5, 0.42] },
   ];
   for (const building of buildings) {
-    if (capacity(props, building.path, limits) <= 0) continue;
-    placeStatic(
-      props, colliders, building.path,
-      building.x, building.y, building.z, building.scale, building.rotation,
-      { r: building.r, h: building.h },
-    );
-    addLandmark(landmarks, building.x, building.z, 'house', building.name);
+    if (capacity(props, HOUSE, limits) <= 0) break;
+    addEnterableHouse(props, colliders, landmarks, {
+      ...building,
+      rotation: DEG(building.rotation),
+      roofTint: building.height > 6 ? [0.27, 0.3, 0.31] : [0.33, 0.25, 0.2],
+    });
   }
 
   const treeCover = [
@@ -197,23 +244,22 @@ function placeForestLandmarks(props, colliders, landmarks, limits) {
 
 function placeCityLandmarks(props, colliders, landmarks, limits) {
   const buildings = [
-    { path: CITY_BUILDINGS[4], x: 54, z: 0, name: 'Bloc Est' },
-    { path: CITY_BUILDINGS[7], x: -54, z: 0, name: 'Bloc Ouest' },
-    { path: CITY_BUILDINGS[2], x: 0, z: 54, name: 'Bloc Nord' },
-    { path: CITY_BUILDINGS[9], x: 0, z: -54, name: 'Bloc Sud' },
-    { path: CITY_BUILDINGS[0], x: 80, z: 80, name: 'Tour Nord-Est' },
-    { path: CITY_BUILDINGS[6], x: -80, z: -80, name: 'Entrepôt Sud-Ouest' },
+    { x: 54, z: 0, width: 10.5, depth: 10, height: 6.4, rotation: 0, name: 'Bloc Est' },
+    { x: -54, z: 0, width: 10.5, depth: 10, height: 6.4, rotation: 90, name: 'Bloc Ouest' },
+    { x: 0, z: 54, width: 9.5, depth: 11, height: 7, rotation: 180, name: 'Bloc Nord' },
+    { x: 0, z: -54, width: 9.5, depth: 11, height: 7, rotation: 270, name: 'Bloc Sud' },
+    { x: 80, z: 80, width: 12, depth: 10, height: 8.4, rotation: 0, name: 'Tour Nord-Est' },
+    { x: -80, z: -80, width: 12, depth: 10, height: 5.4, rotation: 90, name: 'Entrepôt Sud-Ouest' },
   ];
-  buildings.forEach((building, index) => {
-    if (capacity(props, building.path, limits) <= 0) return;
-    const scale = 5 + (index % 3) * 0.35;
-    placeStatic(
-      props, colliders, building.path,
-      building.x, 0, building.z, scale, (index % 4) * 90,
-      { r: 5.25, h: 3.4 * scale },
-    );
-    addLandmark(landmarks, building.x, building.z, 'house', building.name);
-  });
+  for (const building of buildings) {
+    if (capacity(props, HOUSE, limits) <= 0) break;
+    addEnterableHouse(props, colliders, landmarks, {
+      ...building,
+      rotation: DEG(building.rotation),
+      tint: [0.55, 0.58, 0.62],
+      roofTint: [0.28, 0.31, 0.35],
+    });
+  }
 
   const barricades = [
     [26, 0], [0, 26], [-26, 0], [0, -26],
@@ -249,8 +295,8 @@ function tryCityTree(props, colliders, path, x, z, scale, rotationDeg, limits) {
 function placeCityTrees(props, colliders, limits) {
   const rng = new GodotRandom(9137);
   let streetTree = 0;
-  for (const x of [-72, -54, -36, -18, 0, 18, 36, 54, 72]) {
-    for (const z of [-63, -45, -27, 27, 45, 63]) {
+  for (const x of [-90, -72, -54, -36, -18, 0, 18, 36, 54, 72, 90]) {
+    for (const z of [-72, -54, -36, -18, 18, 36, 54, 72]) {
       const path = streetTree % 2 === 0 ? FOREST.trees1 : FOREST.trees2;
       streetTree += 1;
       tryCityTree(props, colliders, path, x, z, rng.randfRange(2.1, 2.9), rng.randfRange(0, 360), limits);
@@ -287,17 +333,17 @@ function buildForest(limits) {
   const colliders = [];
   const landmarks = [];
   placeForestLandmarks(props, colliders, landmarks, limits);
-  placeProp(props, colliders, FOREST.trees1, 150, 2.1, 3.4, true, 30, limits);
-  placeProp(props, colliders, FOREST.trees2, 100, 1.8, 2.8, true, 20, limits);
-  placeProp(props, colliders, FOREST.trees1, 70, 1.8, 2.8, true, 24, limits);
-  placeProp(props, colliders, FOREST.trees2, 70, 1.6, 2.4, true, 20, limits);
-  placeProp(props, colliders, FOREST.deadTree, 55, 1.1, 2.1, true, 16, limits);
-  placeProp(props, colliders, FOREST.stump, 40, 1.2, 2.2, true, 12, limits);
-  placeProp(props, colliders, FOREST.shrubs, 110, 1.4, 2.4, true, 0, limits);
-  placeProp(props, colliders, FOREST.shrubs4, 80, 1.2, 2.2, true, 0, limits);
-  placeProp(props, colliders, FOREST.ferns, 90, 1.4, 2.6, true, 0, limits);
-  placeProp(props, colliders, FOREST.rocks, 40, 0.6, 1.6, false, 0, limits);
-  placeProp(props, colliders, FOREST.moss, 22, 1, 1.9, true, 0, limits);
+  placeProp(props, colliders, FOREST.trees1, 230, 2.1, 3.4, true, 30, limits);
+  placeProp(props, colliders, FOREST.trees2, 160, 1.8, 2.8, true, 20, limits);
+  placeProp(props, colliders, FOREST.trees1, 110, 1.8, 2.8, true, 24, limits);
+  placeProp(props, colliders, FOREST.trees2, 90, 1.6, 2.4, true, 20, limits);
+  placeProp(props, colliders, FOREST.deadTree, 80, 1.1, 2.1, true, 16, limits);
+  placeProp(props, colliders, FOREST.stump, 55, 1.2, 2.2, true, 12, limits);
+  placeProp(props, colliders, FOREST.shrubs, 140, 1.4, 2.4, true, 0, limits);
+  placeProp(props, colliders, FOREST.shrubs4, 105, 1.2, 2.2, true, 0, limits);
+  placeProp(props, colliders, FOREST.ferns, 120, 1.4, 2.6, true, 0, limits);
+  placeProp(props, colliders, FOREST.rocks, 90, 0.6, 1.6, false, 0, limits);
+  placeProp(props, colliders, FOREST.moss, 35, 1, 1.9, true, 0, limits);
   scatterCrates(props, colliders, 14, 90, limits);
   return { props, colliders, landmarks };
 }
@@ -316,15 +362,26 @@ function buildCity(limits) {
       if (Math.hypot(x, z) < 18) continue;
       if (landmarks.some((landmark) => Math.hypot(landmark.x - x, landmark.z - z) < 11)) continue;
       if (rng.randf() < 0.1) continue;
-      const path = CITY_BUILDINGS[rng.randi() % CITY_BUILDINGS.length];
-      if (capacity(props, path, limits) <= 0) continue;
-      const scale = rng.randfRange(3.6, 5.4);
+      if (capacity(props, HOUSE, limits) <= 0) continue;
+      const width = rng.randfRange(7.5, 10.5);
+      const depth = rng.randfRange(7.5, 10.5);
+      const height = rng.randfRange(4.4, 8.2);
       const rotation = (rng.randi() % 4) * 90;
-      placeStatic(props, colliders, path, x, 0, z, scale, rotation, { r: 4.6, h: 3.4 * scale });
+      addEnterableHouse(props, colliders, landmarks, {
+        x,
+        z,
+        width,
+        depth,
+        height,
+        rotation: DEG(rotation),
+        tint: [0.52, 0.55, 0.58],
+        roofTint: [0.26, 0.29, 0.32],
+      });
     }
   }
-  placeProp(props, colliders, CITY.rocks, 25, 0.5, 1.2, false, 0, limits);
-  placeProp(props, colliders, CITY.crates, 30, 1, 1.6, true, 0, limits);
+  placeProp(props, colliders, CITY.rocks, 70, 0.5, 1.4, false, 0, limits);
+  placeProp(props, colliders, FOREST.trees2, 90, 1.6, 2.5, true, 22, limits);
+  placeProp(props, colliders, CITY.crates, 40, 1, 1.6, true, 0, limits);
   scatterCrates(props, colliders, 10, 80, limits);
   placeCityTrees(props, colliders, limits);
   return { props, colliders, landmarks };

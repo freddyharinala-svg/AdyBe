@@ -2,18 +2,6 @@ export const VERSION = '1.0.0-playcanvas';
 export const MAP_SIZE = 760;
 export const WORLD_SIZE = 800;
 
-export const ZONE = {
-  initial: 330,
-  cityInitial: 210,
-  min: 22,
-  hold: 42,
-  stepHold: 30,
-  shrink: 0.06,
-  factor: 0.62,
-  damage: 6,
-  botDamage: 7,
-};
-
 export const QUALITY_LEVELS = {
   low: {
     label: 'Basse (Core2Duo / 2 Go)',
@@ -30,7 +18,7 @@ export const QUALITY_LEVELS = {
     textureDetail: true,
     anisotropy: 2,
     sunIntensity: 1.2,
-    exact: { tree: 270, deadTree: 30, stump: 20, shrub: 70, fern: 45, rock: 40, crate: 24, building: 45 },
+    exact: { tree: 420, deadTree: 60, stump: 35, shrub: 110, fern: 70, rock: 130, crate: 32, building: 60 },
     exactLoot: 56,
   },
   medium: {
@@ -48,7 +36,7 @@ export const QUALITY_LEVELS = {
     textureDetail: true,
     anisotropy: 4,
     sunIntensity: 1.35,
-    exact: { tree: 390, deadTree: 55, stump: 40, shrub: 130, fern: 90, rock: 70, crate: 48, building: 75 },
+    exact: { tree: 650, deadTree: 90, stump: 55, shrub: 170, fern: 120, rock: 200, crate: 60, building: 90 },
     exactLoot: 84,
   },
   high: {
@@ -106,8 +94,18 @@ export const MAPS = {
 };
 
 export const MODES = {
-  solo: { id: 'solo', name: 'Solo — Royaume des ombres', zone: true },
-  training: { id: 'training', name: 'Entraînement — manœuvres', zone: false },
+  solo: { id: 'solo', name: 'Solo — Royaume des ombres' },
+  training: { id: 'training', name: 'Entraînement — manœuvres' },
+};
+
+export const AIRDROP = {
+  first: 30,
+  interval: 65,
+  count: 3,
+  planeSpeed: 58,
+  planeAltitude: 72,
+  fallSpeed: 16,
+  radius: 2.6,
 };
 
 export const WEAPONS = [
@@ -182,6 +180,7 @@ export const AUDIO_PATHS = {
   'battle-royale/victory': 'assets/audio/battle-royale/victory.wav',
   'battle-royale/defeat': 'assets/audio/battle-royale/defeat.wav',
   'battle-royale/elimination': 'assets/audio/battle-royale/elimination.wav',
+  'battle-royale/drop_alarm': 'assets/audio/battle-royale/drop_alarm.wav',
   'music/menu_theme': 'assets/audio/music/menu_theme.wav',
   'music/battle_theme': 'assets/audio/music/battle_theme.wav',
   'vehicles/engine_loop': 'assets/audio/vehicles/engine_loop.wav',

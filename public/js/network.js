@@ -6,7 +6,6 @@ export class NetClient {
     this.online = false;
     this.selfId = null;
     this.players = new Map();
-    this.zone = null;
     this.room = 'adybe';
     this.roomId = 'adybe';
     this.roomKey = null;
@@ -118,7 +117,6 @@ export class NetClient {
         this.mode = message.mode || this.mode;
         this.map = message.map || this.map;
         this.players = new Map(Array.isArray(message.players) ? message.players.map((p) => [p.id, p]) : []);
-        this.zone = message.zone || null;
         this._setPhase(message.phase);
         this.handlers.onWelcome && this.handlers.onWelcome(message);
         break;
@@ -149,13 +147,11 @@ export class NetClient {
         break;
       case 'worldState':
         this.players = new Map(Array.isArray(message.players) ? message.players.map((p) => [p.id, p]) : []);
-        this.zone = message.zone || this.zone;
         this.handlers.onWorld && this.handlers.onWorld(message);
         this.handlers.onSnapshot && this.handlers.onSnapshot(message);
         break;
       case 'snapshot':
         this.players = new Map(Array.isArray(message.players) ? message.players.map((p) => [p.id, p]) : []);
-        this.zone = message.zone || this.zone;
         this.handlers.onSnapshot && this.handlers.onSnapshot(message);
         break;
       case 'event':

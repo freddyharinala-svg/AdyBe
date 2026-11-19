@@ -1,5 +1,5 @@
 import {
-  MAP_SIZE, ZONE, QUALITY_LEVELS, WEAPONS, BOT_NAMES, BOT_TINTS,
+  MAP_SIZE, QUALITY_LEVELS, WEAPONS, BOT_NAMES, BOT_TINTS, AIRDROP,
   CHARACTER_MODELS, SKIN_TINTS, FX_PATHS, MODES, MAPS, clamp, rand, dist2,
 } from './config.js';
 import { World, makeMaterial, primitive } from './world.js';
@@ -102,8 +102,12 @@ export class Game {
     this.tracers = [];
     this.grenades = [];
     this.effects = [];
+    this.airdrops = [];
     this.fxMaterials = new Map();
     this.materials = new Map();
+    this.minimapOthers = [];
+    this.minimapSeen = new Set();
+    this.vehicleHint = '';
     this.netInfo = {};
     this.lobbyState = null;
     this.startedAt = 0;
@@ -111,6 +115,8 @@ export class Game {
     this.serverRecorded = false;
     this.lastResult = null;
     this.networkInterval = 0.1;
+    this.airdropTimer = AIRDROP.first;
+    this.airdropCount = 0;
     this.keys = {};
     this.interactHeld = false;
     this.vehicleCooldownUntil = 0;
@@ -158,7 +164,7 @@ export class Game {
   setLobbyState(state) {
     this.lobbyState = state && typeof state === 'object' ? state : null;
     if (!this.lobbyState) return;
-    if (this.lobbyState.players) this.applyNetworkPlayers(this.lobbyState.players, this.lobbyState.zone);
+    if (this.lobbyState.players) this.applyNetworkPlayers(this.lobbyState.players);
   }
 
   syncLocalVisibility() {
@@ -246,23 +252,15 @@ export class Game {
     this.avatarTasks = [];
     this.bindInput();
 
-    this.zoneEnabled = this.modeDef.zone;
-    this.zoneRadius = this.mapDef.biome === 'forest' ? ZONE.initial : ZONE.cityInitial;
-    this.zoneInitial = this.zoneRadius;
-    this.zoneTarget = this.zoneRadius;
-    this.zoneHold = ZONE.hold;
-    this.zonePhase = 0;
-    this.zoneTimer = 0;
-    this.zoneText = '';
-    this.zoneDanger = false;
-    this.world.setZone(this.zoneRadius, 0, 0);
-
     this.matchStart = performance.now();
     this.elapsed = 0;
     this.paused = false;
     this.over = false;
     this.running = true;
-    this.lastFeedVehicle = false;
+    this.vehicleHint = '';
+    this.airdrops.length = 0;
+    this.airdropTimer = AIRDROP.first;
+    this.airdropCount = 0;
     this.app.on('update', this.update, this);
     if (this.pendingMatchStart) this.onMatchStart(this.pendingMatchStart);
 
@@ -292,12 +290,21 @@ export class Game {
     this.tracers = [];
     this.grenades = [];
     this.effects = [];
+    for (const drop of this.airdrops) {
+      if (drop.plane && drop.plane.parent) drop.plane.destroy();
+      if (drop.entity && drop.entity.parent) drop.entity.destroy();
+      if (drop.marker && drop.marker.parent) drop.marker.destroy();
+    }
+    this.airdrops.length = 0;
+    this.minimapOthers.length = 0;
+    this.minimapSeen.clear();
     this.viewWeapon = null;
     this.player = null;
     this.paused = false;
     this.over = false;
     this.interactHeld = false;
     this.vehicleCooldownUntil = 0;
+    this.vehicleHint = '';
     this.ui.showHUD(false);
   }
 
@@ -329,6 +336,8 @@ export class Game {
       driving: null,
       waypoint: { x: rand(-120, 120), z: rand(-120, 120) },
       thinkTimer: rand(0.2, 1),
+      target: null,
+      targetTimer: 0,
       entity: makeActorVisual(this.app, this.group, options.tint, this.materials),
       animLock: 0,
       character: options.character || 'char_ch15',
@@ -443,6 +452,19 @@ export class Game {
     ];
     const limit = this.quality.exactLoot || 56;
     const spots = this.mapDef.biome === 'forest' ? forestSpots : citySpots;
+    const interiors = this.world ? this.world.interiors : [];
+    for (const interior of interiors) {
+      const inside = (lx, lz) => ({
+        x: interior.x + interior.right.x * lx + interior.back.x * lz,
+        z: interior.z + interior.right.z * lx + interior.back.z * lz,
+      });
+      const cache = inside(0, interior.depth * 0.05);
+      spots.push(spot('weapon', cache.x, cache.z, 'rifle'));
+      const medkit = inside(-interior.width * 0.26, -interior.depth * 0.16);
+      spots.push(spot('medkit', medkit.x, medkit.z));
+      const armor = inside(interior.width * 0.26, interior.depth * 0.2);
+      spots.push(spot('armor', armor.x, armor.z));
+    }
     const fillLimit = Math.max(0, limit - spots.length);
     const fillTypes = ['ammo', 'medkit', 'armor', 'grenade', 'weapon', 'ammo', 'medkit', 'weapon', 'grenade', 'ammo'];
     const fillWeapons = ['rifle', 'pistol', 'sniper'];
@@ -532,6 +554,7 @@ export class Game {
       this.vehicles.push({ x: spot[0], z: spot[1], yaw, entity, occupant: null });
       this.world.colliders.push({ x: spot[0], z: spot[1], r: 2.45, h: 1.9 });
     }
+    this.world.buildColliderGrid();
   }
 
   bindInput() {
@@ -965,10 +988,11 @@ export class Game {
     this.elapsed += dt;
     this.updateLook();
     this.updatePlayer(dt);
+    this.updateInteriors();
     this.updateBots(dt);
     this.updateRemotes(dt);
-    this.updateZone(dt);
     this.updateLoot(dt);
+    this.updateAirdrops(dt);
     this.updateVehicles(dt);
     this.updateTracers(dt);
     this.updateGrenades(dt);
@@ -1145,27 +1169,38 @@ export class Game {
         this.lockAnim(bot, 0.35);
         this.assets.play('weapons/reload', 0.18);
       }
+      bot.targetTimer -= dt;
+      if (bot.targetTimer <= 0) {
+        bot.targetTimer = 0.18 + rand(0, 0.12);
+        let target = null;
+        let bestSquared = 95 * 95;
+        for (const other of this.actors) {
+          if (!other.alive || other === bot) continue;
+          const distanceSquared = dist2(bot.pos, other.pos);
+          const range = other.isBot ? 55 : 95;
+          if (distanceSquared < bestSquared && distanceSquared < range * range) {
+            bestSquared = distanceSquared;
+            target = other;
+          }
+        }
+        bot.target = target;
+      }
+      let target = bot.target;
+      if (target && (!target.alive || dist2(bot.pos, target.pos) > 110 * 110)) {
+        target = null;
+        bot.target = null;
+      }
       let targetX = bot.waypoint.x;
       let targetZ = bot.waypoint.z;
-      if (this.zoneEnabled && Math.hypot(bot.pos.x, bot.pos.z) > this.zoneRadius - 12) {
-        targetX = 0;
-        targetZ = 0;
-      }
-      let target = null;
-      let best = 95;
-      for (const other of this.actors) {
-        if (!other.alive || other === bot) continue;
-        const distance = dist2(bot.pos, other.pos);
-        const range = other.isBot ? 55 : 95;
-        if (distance < best && distance < range) { best = distance; target = other; }
-      }
+      let targetDistance = Infinity;
       if (target) {
         targetX = target.pos.x;
         targetZ = target.pos.z;
+        targetDistance = Math.sqrt(dist2(bot.pos, target.pos));
         const desiredYaw = Math.atan2(-(targetX - bot.pos.x), -(targetZ - bot.pos.z));
         bot.yaw = this.approachAngle(bot.yaw, desiredYaw, dt * 3.5);
-        if (best < 70 && bot.shootTimer <= 0 && bot.reloadTimer <= 0) {
-          bot.pitch = Math.atan2(1.15 - 1.45, Math.max(1, best));
+        if (targetDistance < 70 && bot.shootTimer <= 0 && bot.reloadTimer <= 0) {
+          bot.pitch = Math.atan2(1.15 - 1.45, Math.max(1, targetDistance));
           this.shoot(bot);
           bot.shootTimer = rand(0.55, 1.1);
         }
@@ -1189,14 +1224,14 @@ export class Game {
       let animation = target ? 'RifleIdle' : 'Idle';
       if (distance > 8) {
         animation = 'Walk';
-        if (target && best < 65) {
-          const targetX = target.pos.x - bot.pos.x;
-          const targetZ = target.pos.z - bot.pos.z;
-          const targetLength = Math.hypot(targetX, targetZ) || 1;
-          const rightX = -targetZ / targetLength;
-          const rightZ = targetX / targetLength;
+        if (target && targetDistance < 65) {
+          const toTargetX = target.pos.x - bot.pos.x;
+          const toTargetZ = target.pos.z - bot.pos.z;
+          const targetLength = Math.hypot(toTargetX, toTargetZ) || 1;
+          const rightX = -toTargetZ / targetLength;
+          const rightZ = toTargetX / targetLength;
           const lateral = Math.abs((dx / distance) * rightX + (dz / distance) * rightZ);
-          const toward = Math.abs((dx / distance) * (targetX / targetLength) + (dz / distance) * (targetZ / targetLength));
+          const toward = Math.abs((dx / distance) * (toTargetX / targetLength) + (dz / distance) * (toTargetZ / targetLength));
           animation = lateral > toward ? 'Strafe' : 'Run';
         }
       }
@@ -1256,61 +1291,35 @@ export class Game {
     if (selfId && this.player && this.player.id !== selfId) this.player.id = selfId;
   }
 
-  updateZone(dt) {
-    if (!this.zoneEnabled) {
-      this.zoneText = 'MODE LIBRE — PAS DE ZONE';
-      this.zoneDanger = false;
-      return;
-    }
-    if (this.net.online && this.net.zone && this.net.zone.radius > 0) {
-      this.zoneRadius = this.net.zone.radius;
-      this.zoneTarget = this.net.zone.target || this.zoneRadius;
-      this.zoneText = this.net.zone.shrinking
-        ? 'LA ZONE SE RESSERRE…'
-        : `ZONE SE RESSERRE DANS ${this.formatTime(this.net.zone.hold || 0)}`;
-    } else {
-      if (this.zoneTarget < this.zoneRadius) {
-        this.zoneRadius = Math.max(this.zoneTarget, this.zoneRadius - this.zoneInitial * ZONE.shrink * dt);
-        if (this.zoneRadius - this.zoneTarget < 0.5) {
-          this.zonePhase += 1;
-          this.zoneTarget = Math.max(ZONE.min, this.zoneTarget * ZONE.factor);
-          this.zoneHold = ZONE.stepHold + this.zonePhase * 6;
-          this.ui.banner('LA ZONE SE RESSERRE', 2.4);
-        }
-        this.zoneText = 'LA ZONE SE RESSERRE…';
-      } else {
-        this.zoneHold -= dt;
-        if (this.zoneHold <= 0) this.zoneTarget = Math.max(ZONE.min, this.zoneRadius * ZONE.factor);
-        this.zoneText = `ZONE SE RESSERRE DANS ${this.formatTime(this.zoneHold)}`;
-      }
-    }
-    this.world.setZone(this.zoneRadius, 0, 0);
-
-    this.zoneTimer += dt;
-    if (this.zoneTimer >= 1) {
-      this.zoneTimer = 0;
-      for (const actor of this.actors) {
-        if (!actor.alive) continue;
-        if (Math.hypot(actor.pos.x, actor.pos.z) > this.zoneRadius) {
-          this.applyDamage(actor, actor.isBot ? ZONE.botDamage : ZONE.damage, null, { weapon: 'zone' });
-        }
-      }
-    }
-    this.zoneDanger = this.player.alive && Math.hypot(this.player.pos.x, this.player.pos.z) > this.zoneRadius;
-    if (this.zoneDanger) this.zoneText = 'RENTRER DANS LA ZONE !';
-  }
-
   formatTime(seconds) {
     const value = Math.max(0, Math.floor(seconds));
     return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
   }
 
+  updateInteriors() {
+    if (!this.world || !this.player) return;
+    for (const interior of this.world.interiors) {
+      const dx = this.player.pos.x - interior.x;
+      const dz = this.player.pos.z - interior.z;
+      const distanceSquared = dx * dx + dz * dz;
+      const radius = interior.hideRadius + (interior.inside ? 2 : 0);
+      const inside = distanceSquared < radius * radius;
+      if (inside !== interior.inside) {
+        interior.inside = inside;
+        interior.roof.enabled = !inside;
+      }
+    }
+  }
+
   updateLoot(dt) {
+    if (!this.player) return;
     for (let i = this.loot.length - 1; i >= 0; i -= 1) {
       const item = this.loot[i];
-      item.entity.rotateLocal(0, dt * 90, 0);
-      if (!this.player.alive) continue;
-      if (dist2(this.player.pos, item) > 1.9) continue;
+      const dx = this.player.pos.x - item.x;
+      const dz = this.player.pos.z - item.z;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared < 3600) item.entity.rotateLocal(0, dt * 90, 0);
+      if (!this.player.alive || distanceSquared > 3.61) continue;
       if (item.type === 'ammo') {
         for (const state of this.player.weapons) state.reserve += 60;
         this.ui.feed('+60 munitions par arme', '#ffcf5c');
@@ -1341,26 +1350,180 @@ export class Game {
     }
   }
 
+  airdropMaterial(key, color, emissive) {
+    const name = `airdrop-${key}`;
+    let material = this.materials.get(name);
+    if (!material) {
+      material = makeMaterial(this.app, {
+        color, emissive, specular: [0.1, 0.1, 0.1], shininess: 20,
+      });
+      this.materials.set(name, material);
+    }
+    return material;
+  }
+
+  spawnAirdrop() {
+    const spread = MAP_SIZE * 0.36;
+    const limit = MAP_SIZE / 2 - 30;
+    const seed = (this.mapDef.biome === 'forest' ? 445001 : 882017) + this.airdropCount * 7919;
+    const rng = new GodotRandom(seed);
+    let x = rng.randfRange(-spread, spread);
+    let z = rng.randfRange(-spread, spread);
+    if (this.player) {
+      const dx = x - this.player.pos.x;
+      const dz = z - this.player.pos.z;
+      if (dx * dx + dz * dz < 40 * 40) {
+        x += x >= 0 ? -70 : 70;
+        z += z >= 0 ? -70 : 70;
+      }
+    }
+    x = clamp(x, -limit, limit);
+    z = clamp(z, -limit, limit);
+    const metal = this.airdropMaterial('metal', [0.22, 0.26, 0.24], [0.02, 0.03, 0.02]);
+    const plane = new pc.Entity('airdrop-plane');
+    primitive(this.app, 'box', [0, 0, 0], [7.5, 1.4, 1.6], 0, metal, plane);
+    primitive(this.app, 'box', [0, 0.1, 0], [1.8, 0.25, 12], 0, metal, plane);
+    primitive(this.app, 'box', [-2.8, 0.8, 0], [1.4, 2, 0.25], 0, metal, plane);
+    plane.setPosition(-MAP_SIZE / 2 - 70, AIRDROP.planeAltitude, z);
+    this.group.addChild(plane);
+    this.airdrops.push({
+      phase: 'plane', x, z, y: AIRDROP.planeAltitude, plane,
+      entity: null, parachute: null, marker: null, smokeTimer: 0,
+    });
+    this.assets.play('battle-royale/drop_alarm', 0.55);
+    this.ui.banner('LARGAGE AÉRIEN — CAISSE EN APPROCHE', 3);
+    this.ui.feed('Largage aérien détecté', '#ffcf5c');
+  }
+
+  releaseAirdrop(drop) {
+    if (drop.plane) {
+      drop.plane.destroy();
+      drop.plane = null;
+    }
+    const crate = this.airdropMaterial('crate', [0.55, 0.38, 0.18], [0.12, 0.07, 0.02]);
+    const entity = new pc.Entity('airdrop-crate');
+    primitive(this.app, 'box', [0, 0, 0], [2.2, 2, 2.2], 0, crate, entity);
+    primitive(this.app, 'box', [0, 1.02, 0], [2.4, 0.18, 2.4], 0, crate, entity);
+    const canopy = this.airdropMaterial('canopy', [0.85, 0.72, 0.25], [0.2, 0.16, 0.03]);
+    const parachute = new pc.Entity('airdrop-parachute');
+    primitive(this.app, 'cone', [0, 2.1, 0], [5.5, 2.6, 5.5], 0, canopy, parachute);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        primitive(this.app, 'box', [sx * 1.8, 1, sz * 1.8], [0.05, 2.4, 0.05], 0, canopy, parachute);
+      }
+    }
+    entity.addChild(parachute);
+    entity.setPosition(drop.x, drop.y, drop.z);
+    this.group.addChild(entity);
+    drop.entity = entity;
+    drop.parachute = parachute;
+    drop.phase = 'fall';
+  }
+
+  landAirdrop(drop) {
+    if (drop.parachute) {
+      drop.parachute.destroy();
+      drop.parachute = null;
+    }
+    drop.y = 0.9;
+    drop.entity.setPosition(drop.x, drop.y, drop.z);
+    const beacon = this.airdropMaterial('beacon', [0.15, 0.85, 0.5], [0.1, 0.6, 0.35]);
+    drop.marker = primitive(this.app, 'torus', [drop.x, 0.12, drop.z], [3.2, 1, 3.2], 0, beacon, this.group);
+    this.spawnEffect('impact_ring', { x: drop.x, y: 0.15, z: drop.z }, 4, 1.2);
+    this.assets.play('ui/notify', 0.4);
+    this.ui.feed('Caisse au sol — approchez pour l’ouvrir', '#3ddc84');
+    drop.phase = 'ground';
+  }
+
+  collectAirdrop() {
+    const player = this.player;
+    for (const state of player.weapons) state.reserve += 120;
+    player.armor = 100;
+    player.hp = Math.min(100, player.hp + 60);
+    player.medkits += 2;
+    player.grenades += 2;
+    const index = WEAPONS.findIndex((weapon) => weapon.key === 'sniper');
+    if (index >= 0) {
+      player.weaponIndex = index;
+      player.reloadTimer = 0;
+      const state = player.weapons[index];
+      state.mag = WEAPONS[index].magSize;
+      state.reserve = Math.max(state.reserve, 60);
+    }
+    this.spawnEffect('spark', { x: player.pos.x, y: player.pos.y + 1.2, z: player.pos.z }, 2.4, 0.4);
+    this.assets.play('battle-royale/drop_alarm', 0.35);
+    this.ui.feed('CAISSE D’AIRDROP — équipement d’élite récupéré', '#ffcf5c');
+    this.ui.banner('CAISSE RÉCUPÉRÉE — ÉQUIPEMENT D’ÉLITE', 2.5);
+  }
+
+  updateAirdrops(dt) {
+    if (!this.group || !this.player) return;
+    this.airdropTimer -= dt;
+    if (this.airdropTimer <= 0) {
+      if (this.airdropCount < AIRDROP.count) {
+        this.airdropCount += 1;
+        this.airdropTimer = AIRDROP.interval;
+        this.spawnAirdrop();
+      } else {
+        this.airdropTimer = Infinity;
+      }
+    }
+    for (let i = this.airdrops.length - 1; i >= 0; i -= 1) {
+      const drop = this.airdrops[i];
+      if (drop.phase === 'plane') {
+        const current = drop.plane.getPosition();
+        const nextX = current.x + AIRDROP.planeSpeed * dt;
+        drop.plane.setPosition(nextX, current.y, current.z);
+        if (nextX >= drop.x) this.releaseAirdrop(drop);
+        continue;
+      }
+      if (drop.phase === 'fall') {
+        drop.y = Math.max(0.9, drop.y - AIRDROP.fallSpeed * dt);
+        drop.entity.setPosition(drop.x, drop.y, drop.z);
+        drop.entity.rotateLocal(0, dt * 25, 0);
+        drop.smokeTimer -= dt;
+        if (drop.smokeTimer <= 0) {
+          drop.smokeTimer = 0.14;
+          this.spawnEffect('smoke', { x: drop.x, y: drop.y + 0.5, z: drop.z }, 2.2, 0.9);
+        }
+        if (drop.y <= 0.9) this.landAirdrop(drop);
+        continue;
+      }
+      drop.entity.rotateLocal(0, dt * 18, 0);
+      if (drop.marker) drop.marker.rotateLocal(0, dt * 60, 0);
+      if (!this.player.alive) continue;
+      const dx = this.player.pos.x - drop.x;
+      const dz = this.player.pos.z - drop.z;
+      if (dx * dx + dz * dz > AIRDROP.radius * AIRDROP.radius) continue;
+      this.collectAirdrop();
+      drop.entity.destroy();
+      if (drop.marker) drop.marker.destroy();
+      this.airdrops.splice(i, 1);
+    }
+  }
+
   updateVehicles(dt) {
     const player = this.player;
+    let hint = '';
     if (!player || !player.alive) {
       this.interactHeld = false;
-      this.ui.showVehicleHint('');
-      return;
+    } else {
+      const touchInteract = !!(this.ui.isTouch && this.ui.touch.interact);
+      if (touchInteract && !this.interactHeld) this.toggleVehicle();
+      this.interactHeld = touchInteract;
+      if (player.driving) {
+        hint = 'E / INTERAGIR — DESCENDRE DU HUMVEE';
+      } else {
+        for (const vehicle of this.vehicles) {
+          if (vehicle.occupant) continue;
+          if (dist2(player.pos, vehicle) < 4.5) {
+            hint = 'E / INTERAGIR — MONTER À BORD DU HUMVEE';
+            break;
+          }
+        }
+      }
     }
-    const touchInteract = !!(this.ui.isTouch && this.ui.touch.interact);
-    if (touchInteract && !this.interactHeld) this.toggleVehicle();
-    this.interactHeld = touchInteract;
-    if (player.driving) {
-      this.ui.showVehicleHint('E / INTERAGIR — DESCENDRE DU HUMVEE');
-      return;
-    }
-    let near = false;
-    for (const vehicle of this.vehicles) {
-      if (vehicle.occupant) continue;
-      if (dist2(player.pos, vehicle) < 4.5) { near = true; break; }
-    }
-    this.ui.showVehicleHint(near ? 'E / INTERAGIR — MONTER À BORD DU HUMVEE' : '');
+    this.vehicleHint = hint;
   }
 
   updateTracers(dt) {
@@ -1432,13 +1595,31 @@ export class Game {
     this.minimapTimer = (this.minimapTimer || 0) - dt;
     if (this.minimapTimer <= 0) {
       this.minimapTimer = 0.05;
-      this.ui.minimap(
-        this.layout,
-        this.player,
-        { x: 0, z: 0, radius: this.zoneRadius },
-        Array.from(this.remotes.values()).concat(this.bots),
-        { loot: this.loot, vehicles: this.vehicles, landmarks: this.world ? this.world.landmarks : [] },
-      );
+      const others = this.minimapOthers;
+      const seen = this.minimapSeen;
+      others.length = 0;
+      seen.clear();
+      for (const actor of this.remotes.values()) {
+        others.push(actor);
+        seen.add(String(actor.id));
+      }
+      for (const bot of this.bots) {
+        others.push(bot);
+        seen.add(String(bot.id));
+      }
+      const selfId = String(this.net && this.net.selfId);
+      const addStates = (states) => {
+        if (!states || !states.size) return;
+        for (const [rawId, state] of states) {
+          const id = String(rawId);
+          if (id === selfId || seen.has(id)) continue;
+          seen.add(id);
+          others.push(state);
+        }
+      };
+      if (this.net && this.net.online) addStates(this.net.players);
+      addStates(this.remoteStates);
+      this.ui.minimap(this.layout, this.player, others, this.mapDef);
     }
   }
 
@@ -1492,10 +1673,10 @@ export class Game {
   acceptWorldMessage(message) {
     if (!message || message === this.lastWorldMessage) return;
     this.lastWorldMessage = message;
-    this.applyNetworkPlayers(message.players, message.zone);
+    this.applyNetworkPlayers(message.players);
   }
 
-  applyNetworkPlayers(players, zone) {
+  applyNetworkPlayers(players) {
     let source = null;
     if (players instanceof Map) source = Array.from(players.values());
     else if (Array.isArray(players)) source = players;
@@ -1512,16 +1693,6 @@ export class Game {
         this.remoteStates.set(String(state.id), state);
       }
     }
-    if (zone) this.applyZoneState(zone);
-  }
-
-  applyZoneState(zone) {
-    if (!zone || typeof zone !== 'object') return;
-    if (Number.isFinite(zone.radius)) this.zoneRadius = zone.radius;
-    if (Number.isFinite(zone.target)) this.zoneTarget = zone.target;
-    if (Number.isFinite(zone.hold)) this.zoneHold = zone.hold;
-    if (Number.isFinite(zone.phase)) this.zonePhase = zone.phase;
-    this.zoneShrinking = !!zone.shrinking;
   }
 
   onMatchStart(data) {
@@ -1532,11 +1703,8 @@ export class Game {
     if (!this.player || !this.group || !this.running) return;
     this.pendingMatchStart = null;
     if (message.map && MAPS[message.map]) this.mapDef = MAPS[message.map];
-    if (message.mode && MODES[message.mode]) {
-      this.modeDef = MODES[message.mode];
-      this.zoneEnabled = this.modeDef.zone;
-    }
-    this.applyNetworkPlayers(message.players, message.zone);
+    if (message.mode && MODES[message.mode]) this.modeDef = MODES[message.mode];
+    this.applyNetworkPlayers(message.players);
   }
 
   onMatchEnd(data) {
@@ -1669,11 +1837,6 @@ export class Game {
       this.ui.feed(`${payload.name || 'Combattant'} a quitté la partie`);
       return;
     }
-    if (event === 'zone') {
-      this.applyZoneState(payload);
-      this.ui.banner(payload.shrinking ? 'LA ZONE SE RESSERRE' : 'NOUVEAU CERCLE', 2.2);
-      return;
-    }
     if (event === 'matchEnd') this.onMatchEnd(payload);
   }
 
@@ -1681,9 +1844,10 @@ export class Game {
     const player = this.player;
     const weapon = WEAPONS[player.weaponIndex];
     const state = player.weapons[player.weaponIndex];
-    const aliveBots = this.bots.filter((bot) => bot.alive).length;
-    const aliveRemotes = Array.from(this.remotes.values()).filter((actor) => actor.alive).length;
-    const vehicle = this.vehicles.find((node) => !node.occupant && dist2(player.pos, node) < 4.5);
+    let aliveBots = 0;
+    for (const bot of this.bots) if (bot.alive) aliveBots += 1;
+    let aliveRemotes = 0;
+    for (const actor of this.remotes.values()) if (actor.alive) aliveRemotes += 1;
     this.ui.updateHUD({
       hp: player.hp,
       armor: player.armor,
@@ -1697,14 +1861,10 @@ export class Game {
       grenades: player.grenades,
       aiming: player.aiming,
       damageFlash: player.damageFlash,
-      zoneEnabled: this.zoneEnabled,
-      zoneText: this.zoneText,
-      zoneDanger: this.zoneDanger,
-      vehicleHint: this.ui.pendingVehicleHint || '',
+      heading: player.yaw,
+      vehicleHint: this.vehicleHint,
     });
   }
-
-  showVehicleHint(text) { this.ui.pendingVehicleHint = text; }
 
   endMatch(victory, placement) {
     if (this.over || !this.player) return;

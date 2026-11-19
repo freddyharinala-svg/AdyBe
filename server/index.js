@@ -147,14 +147,6 @@ function getRoom(id) {
     rooms.set(id, {
       id,
       players: new Map(),
-      zone: {
-        initial: 330,
-        radius: 330,
-        target: 330,
-        hold: 42,
-        phase: 0,
-        shrinking: false,
-      },
     });
   }
   return rooms.get(id);
@@ -174,17 +166,6 @@ function publicPlayers(room) {
     tint: player.tint,
     kills: player.kills,
   }));
-}
-
-function zoneState(room) {
-  return {
-    x: 0,
-    z: 0,
-    radius: room.zone.radius,
-    target: room.zone.target,
-    hold: room.zone.hold,
-    shrinking: room.zone.shrinking,
-  };
 }
 
 function broadcast(room, object) {
@@ -244,8 +225,7 @@ function handleJoin(client, message) {
   room.players.set(id, player);
   client.id = id;
   client.room = room;
-  if (map === 'city') room.zone.initial = 210;
-  client.send({ type: 'welcome', id, room: roomId, players: publicPlayers(room), zone: zoneState(room) });
+  client.send({ type: 'welcome', id, room: roomId, players: publicPlayers(room) });
   event(room, 'join', { name: player.name });
 }
 
@@ -379,23 +359,8 @@ server.on('upgrade', (request, socket) => {
 });
 
 setInterval(() => {
-  const seconds = SNAPSHOT_MS / 1000;
   for (const room of rooms.values()) {
-    const zone = room.zone;
-    if (zone.shrinking) {
-      zone.radius = Math.max(zone.target, zone.radius - zone.initial * 0.06 * seconds);
-      if (zone.radius <= zone.target + 0.5) {
-        zone.radius = zone.target;
-        zone.phase += 1;
-        zone.shrinking = false;
-        zone.target = Math.max(22, zone.radius * 0.62);
-        zone.hold = 30 + zone.phase * 6;
-      }
-    } else {
-      zone.hold -= seconds;
-      if (zone.hold <= 0) zone.shrinking = true;
-    }
-    broadcast(room, { type: 'snapshot', players: publicPlayers(room), zone: zoneState(room), time: Date.now() });
+    broadcast(room, { type: 'snapshot', players: publicPlayers(room), time: Date.now() });
     if (room.players.size === 0) rooms.delete(room.id);
   }
 }, SNAPSHOT_MS);

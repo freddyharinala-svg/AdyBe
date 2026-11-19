@@ -1,4 +1,4 @@
-import { MAPS, MODES, MAP_SIZE, clamp, VERSION } from './config.js';
+import { MAPS, MODES, WORLD_SIZE, clamp, VERSION } from './config.js';
 import { Settings } from './settings.js';
 import { Session } from './session.js';
 
@@ -13,6 +13,18 @@ const escapeHtml = (value) => String(value == null ? '' : value)
 const on = (id, event, handler) => {
   const node = byId(id);
   if (node) node.addEventListener(event, handler);
+};
+const COMPASS_POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+const minimapImages = new Map();
+const getMinimapImage = (src) => {
+  if (!src) return null;
+  if (!minimapImages.has(src)) {
+    const image = new Image();
+    image.src = src;
+    minimapImages.set(src, image);
+  }
+  const image = minimapImages.get(src);
+  return image.complete && image.naturalWidth ? image : null;
 };
 
 export class UI {
@@ -29,7 +41,10 @@ export class UI {
       fire: false, aim: false, jump: false, reload: false,
       medkit: false, grenade: false, interact: false, weapon: false,
     };
-    this.feedLines = [];
+    this.hudRefs = null;
+    this.lastHud = {};
+    this.minimapStatic = null;
+    this.minimapStaticKey = '';
     this.bannerTimer = 0;
     this.hitTimer = 0;
     this.shopItems = [];
@@ -329,10 +344,7 @@ export class UI {
   showHUD(visible) {
     byId('hud').classList.toggle('hidden', !visible);
     byId('touch-controls').classList.toggle('hidden', !(visible && this.isTouch));
-  }
-
-  showVehicleHint(text) {
-    this.pendingVehicleHint = text || '';
+    if (visible) this.lastHud = {};
   }
 
   setNet(online, text) {
@@ -346,32 +358,69 @@ export class UI {
   setVersion(version) { byId('version-status').textContent = version; }
 
   updateHUD(state) {
-    const hp = clamp(Math.round(state.hp), 0, 100);
-    byId('hud-hp').textContent = String(hp);
-    byId('hud-hp-fill').style.width = `${hp}%`;
-    byId('hud-hp-fill').style.background = hp <= 25 ? '#ff4d4d' : hp <= 60 ? '#ffcf5c' : '#3ddc84';
-    byId('hud-armor-fill').style.width = `${clamp(state.armor, 0, 100)}%`;
-    byId('hud-weapon').textContent = state.weaponName;
-    byId('hud-ammo').textContent = state.weaponKey === 'knife' ? '—' : `${state.mag} / ${state.reserve}`;
-    byId('hud-kills').textContent = `ÉLIMINATIONS ${state.kills}`;
-    byId('hud-alive').textContent = `VIVANTS ${state.alive}`;
-    byId('hud-medkits').textContent = String(state.medkits);
-    byId('hud-grenades').textContent = String(state.grenades);
-    byId('hud-crosshair').style.visibility = state.aiming ? 'hidden' : 'visible';
-    byId('hud-vignette').style.opacity = String(clamp(state.damageFlash || 0, 0, 1));
-
-    const zone = byId('hud-zone');
-    if (!state.zoneEnabled) {
-      zone.textContent = 'MODE LIBRE — PAS DE ZONE';
-      zone.classList.remove('danger');
-    } else {
-      zone.textContent = state.zoneText;
-      zone.classList.toggle('danger', state.zoneDanger);
+    if (!this.hudRefs) {
+      this.hudRefs = {
+        hp: byId('hud-hp'),
+        hpFill: byId('hud-hp-fill'),
+        armorFill: byId('hud-armor-fill'),
+        weapon: byId('hud-weapon'),
+        ammo: byId('hud-ammo'),
+        kills: byId('hud-kills'),
+        alive: byId('hud-alive'),
+        medkits: byId('hud-medkits'),
+        grenades: byId('hud-grenades'),
+        crosshair: byId('hud-crosshair'),
+        vignette: byId('hud-vignette'),
+        vehicle: byId('hud-vehicle'),
+        compassLeft: byId('compass-left'),
+        compassCenter: byId('compass-center'),
+        compassDegrees: byId('compass-degrees'),
+        compassRight: byId('compass-right'),
+      };
+      this.lastHud = {};
     }
-
-    const hint = byId('hud-vehicle');
-    hint.textContent = state.vehicleHint || '';
-    hint.classList.toggle('hidden', !state.vehicleHint);
+    const refs = this.hudRefs;
+    const last = this.lastHud;
+    const set = (key, value, write) => {
+      if (last[key] === value) return;
+      last[key] = value;
+      write();
+    };
+    const hp = clamp(Math.round(state.hp), 0, 100);
+    set('hp', hp, () => {
+      refs.hp.textContent = String(hp);
+      refs.hpFill.style.width = `${hp}%`;
+      refs.hpFill.style.background = hp <= 25 ? '#ff4d4d' : hp <= 60 ? '#ffcf5c' : '#3ddc84';
+    });
+    const armor = clamp(state.armor, 0, 100);
+    set('armor', armor, () => { refs.armorFill.style.width = `${armor}%`; });
+    set('weaponName', state.weaponName, () => { refs.weapon.textContent = state.weaponName; });
+    const ammo = state.weaponKey === 'knife' ? '—' : `${state.mag} / ${state.reserve}`;
+    set('ammo', ammo, () => { refs.ammo.textContent = ammo; });
+    const kills = `ÉLIMINATIONS ${state.kills}`;
+    set('kills', kills, () => { refs.kills.textContent = kills; });
+    const alive = `VIVANTS ${state.alive}`;
+    set('alive', alive, () => { refs.alive.textContent = alive; });
+    set('medkits', state.medkits, () => { refs.medkits.textContent = String(state.medkits); });
+    set('grenades', state.grenades, () => { refs.grenades.textContent = String(state.grenades); });
+    set('aiming', !!state.aiming, () => {
+      refs.crosshair.style.visibility = state.aiming ? 'hidden' : 'visible';
+    });
+    const flash = Math.round(clamp(state.damageFlash || 0, 0, 1) * 100) / 100;
+    set('flash', flash, () => { refs.vignette.style.opacity = String(flash); });
+    const hint = state.vehicleHint || '';
+    set('vehicleHint', hint, () => {
+      refs.vehicle.textContent = hint;
+      refs.vehicle.classList.toggle('hidden', !hint);
+    });
+    const heading = Math.round(((-(state.heading || 0) * 180 / Math.PI + 360) % 360 + 360) % 360) % 360;
+    const point = Math.round(heading / 45) % 8;
+    set('compass', heading, () => {
+      refs.compassLeft.textContent = COMPASS_POINTS[(point + 6) % 8];
+      refs.compassCenter.textContent = COMPASS_POINTS[point];
+      refs.compassRight.textContent = COMPASS_POINTS[(point + 2) % 8];
+      refs.compassDegrees.textContent = `${String(heading).padStart(3, '0')}°`;
+    });
   }
 
   feed(text, color) {
@@ -380,11 +429,7 @@ export class UI {
     if (color) line.style.borderLeftColor = color;
     const box = byId('hud-feed');
     box.insertBefore(line, box.firstChild);
-    this.feedLines.push(line);
-    setTimeout(() => {
-      line.remove();
-      this.feedLines = this.feedLines.filter((node) => node !== line);
-    }, 4200);
+    setTimeout(() => line.remove(), 4200);
     while (box.children.length > 5) box.removeChild(box.lastChild);
   }
 
@@ -441,117 +486,68 @@ export class UI {
     this.screen('results');
   }
 
-  minimap(layout, player, zone, others, markers) {
+  minimap(layout, player, others, mapDef) {
     const canvas = byId('minimap');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const size = canvas.width;
-    const half = MAP_SIZE / 2;
-    const scale = size / (half * 2);
+    const half = WORLD_SIZE / 2;
+    const scale = size / WORLD_SIZE;
     const project = (x, z) => [(x + half) * scale, (z + half) * scale];
     const source = layout || {};
-    const info = markers || {};
+    const positionOf = (entry, fallback) => {
+      if (!entry) return fallback;
+      const sourcePoint = entry.pos || entry;
+      const x = Number(sourcePoint.x !== undefined ? sourcePoint.x : entry.x);
+      const z = Number(sourcePoint.z !== undefined ? sourcePoint.z : entry.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return fallback;
+      return { x, z, yaw: Number(entry.yaw) || 0, alive: entry.alive !== false };
+    };
+
+    const mapSrc = (mapDef && mapDef.minimap) || (MAPS.forest && MAPS.forest.minimap) || '';
+    const mapImage = getMinimapImage(mapSrc);
+    const staticKey = `${size}|${mapSrc}|${mapImage ? 1 : 0}`;
+    if (!this.minimapStatic || staticKey !== this.minimapStaticKey || layout !== this.minimapLayout) {
+      const staticCanvas = document.createElement('canvas');
+      staticCanvas.width = size;
+      staticCanvas.height = size;
+      const staticCtx = staticCanvas.getContext('2d');
+      if (staticCtx) {
+        if (mapImage) {
+          staticCtx.drawImage(mapImage, 0, 0, size, size);
+        } else {
+          staticCtx.fillStyle = '#0d120e';
+          staticCtx.fillRect(0, 0, size, size);
+        }
+        if (Array.isArray(source.towns)) {
+          staticCtx.font = 'bold 8px monospace';
+          staticCtx.textAlign = 'center';
+          for (const town of source.towns) {
+            const [x, y] = project(town.x, town.z);
+            const radius = Math.max(2, (town.radius || 20) * scale);
+            staticCtx.fillStyle = 'rgba(168,146,102,.35)';
+            staticCtx.strokeStyle = 'rgba(240,225,180,.8)';
+            staticCtx.lineWidth = 1;
+            staticCtx.beginPath();
+            staticCtx.arc(x, y, radius, 0, Math.PI * 2);
+            staticCtx.fill();
+            staticCtx.stroke();
+            staticCtx.fillStyle = 'rgba(245,232,190,.95)';
+            staticCtx.fillText(String(town.name || '').slice(0, 10), x, y + 3);
+          }
+        }
+      }
+      this.minimapStatic = staticCanvas;
+      this.minimapStaticKey = staticKey;
+      this.minimapLayout = layout;
+    }
 
     ctx.clearRect(0, 0, size, size);
-    ctx.fillStyle = '#0d120e';
-    ctx.fillRect(0, 0, size, size);
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, size, size);
     ctx.clip();
-
-    ctx.strokeStyle = 'rgba(210,220,190,.08)';
-    ctx.lineWidth = 1;
-    for (let step = 1; step < 8; step += 1) {
-      const offset = (size / 8) * step;
-      ctx.beginPath();
-      ctx.moveTo(offset, 0);
-      ctx.lineTo(offset, size);
-      ctx.moveTo(0, offset);
-      ctx.lineTo(size, offset);
-      ctx.stroke();
-    }
-
-    if (Array.isArray(source.roads)) {
-      ctx.strokeStyle = 'rgba(205,188,138,.7)';
-      for (const road of source.roads) {
-        if (!Array.isArray(road.points) || road.points.length < 2) continue;
-        ctx.beginPath();
-        road.points.forEach((point, index) => {
-          const [x, y] = project(point[0], point[1]);
-          if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        ctx.lineWidth = Math.max(1.5, (road.width || 5) * scale * 1.6);
-        ctx.stroke();
-      }
-    }
-
-    if (Array.isArray(source.towns)) {
-      for (const town of source.towns) {
-        const [x, y] = project(town.x, town.z);
-        const radius = Math.max(2, (town.radius || 20) * scale);
-        ctx.fillStyle = 'rgba(168,146,102,.28)';
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(220,200,150,.45)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = 'rgba(240,225,180,.8)';
-        ctx.font = '8px monospace';
-        ctx.fillText(town.name || '', x + radius + 2, y + 3);
-      }
-    }
-
-    if (Array.isArray(source.groves)) {
-      ctx.fillStyle = 'rgba(70,120,70,.65)';
-      for (const grove of source.groves) {
-        const [x, y] = project(grove.x, grove.z);
-        ctx.fillRect(x - 1, y - 1, 2, 2);
-      }
-    }
-
-    if (Array.isArray(info.landmarks)) {
-      for (const landmark of info.landmarks) {
-        const [x, y] = project(landmark.x, landmark.z);
-        ctx.fillStyle = landmark.type === 'house' ? '#d8c49a' : '#8aa87a';
-        ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
-      }
-    }
-
-    if (zone && Number.isFinite(zone.radius)) {
-      const [zx, zy] = project(zone.x || 0, zone.z || 0);
-      const radius = Math.max(1, zone.radius * scale);
-      ctx.fillStyle = 'rgba(255,122,60,.07)';
-      ctx.beginPath();
-      ctx.arc(zx, zy, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = '#ff7a3c';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    const lootColors = {
-      ammo: '#ffd45c', medkit: '#ff5a5a', armor: '#4da3ff', grenade: '#ff9b45', weapon: '#e8eefc',
-    };
-    if (Array.isArray(info.loot)) {
-      for (const item of info.loot) {
-        const [x, y] = project(item.x, item.z);
-        ctx.fillStyle = lootColors[item.type] || '#ffffff';
-        ctx.fillRect(x - 1, y - 1, 2, 2);
-      }
-    }
-
-    if (Array.isArray(info.vehicles)) {
-      ctx.strokeStyle = '#71d4ff';
-      ctx.lineWidth = 1.5;
-      for (const vehicle of info.vehicles) {
-        const [x, y] = project(vehicle.x, vehicle.z);
-        ctx.strokeRect(x - 2.5, y - 2.5, 5, 5);
-      }
-    }
+    ctx.drawImage(this.minimapStatic, 0, 0);
 
     if (Array.isArray(others)) {
       ctx.font = 'bold 8px monospace';
@@ -559,10 +555,22 @@ export class UI {
       let botCount = 0;
       let playerCount = 0;
       for (const other of others) {
-        if (other.alive === false || !Number.isFinite(other.x) || !Number.isFinite(other.z)) continue;
-        const [x, y] = project(other.x, other.z);
-        const isBot = other.isBot === true;
+        const point = positionOf(other, null);
+        if (!point) continue;
+        const [x, y] = project(point.x, point.z);
+        const isBot = other.isBot === true || other.type === 'bot';
         if (isBot) botCount += 1; else playerCount += 1;
+        if (!point.alive) {
+          ctx.strokeStyle = 'rgba(190,190,190,.8)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x - 3, y - 3);
+          ctx.lineTo(x + 3, y + 3);
+          ctx.moveTo(x + 3, y - 3);
+          ctx.lineTo(x - 3, y + 3);
+          ctx.stroke();
+          continue;
+        }
         if (!isBot) {
           const pulse = 4.5 + Math.sin(performance.now() / 220) * 1.5;
           ctx.strokeStyle = 'rgba(255,212,92,.75)';
@@ -590,8 +598,9 @@ export class UI {
       ctx.textAlign = 'left';
     }
 
-    if (player && Number.isFinite(player.x) && Number.isFinite(player.z)) {
-      const [px, py] = project(player.x, player.z);
+    const playerPoint = positionOf(player, null);
+    if (playerPoint) {
+      const [px, py] = project(playerPoint.x, playerPoint.z);
       const sweepRadius = Math.max(26, 150 * scale);
       const sweepAngle = (performance.now() / 1400) % (Math.PI * 2);
       ctx.save();
@@ -616,7 +625,7 @@ export class UI {
 
       ctx.save();
       ctx.translate(px, py);
-      ctx.rotate(-(player.yaw || 0));
+      ctx.rotate(-(playerPoint.yaw || 0));
       ctx.fillStyle = '#0b1a10';
       ctx.strokeStyle = '#eafff1';
       ctx.lineWidth = 1.5;

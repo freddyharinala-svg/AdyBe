@@ -2,6 +2,9 @@ import { MAP_SIZE, clamp } from './config.js';
 import { buildExactWorldSpec } from './exact-world.js';
 import { needsYawWrapper } from './models.js';
 
+const COLLIDER_CELL = 16;
+const PROCEDURAL_HOUSE = 'procedural-house';
+
 export function makeMaterial(app, options) {
   const settings = options || {};
   const material = new pc.StandardMaterial();
@@ -58,8 +61,11 @@ export class World {
     this.mapDef = mapDef;
     this.quality = quality;
     this.colliders = [];
+    this.colliderGrid = new Map();
+    this.colliderCell = COLLIDER_CELL;
+    this.queryStamp = 0;
     this.landmarks = [];
-    this.zoneEntity = null;
+    this.interiors = [];
     this.sun = null;
     this.materials = {};
     this.group = new pc.Entity('world');
@@ -92,18 +98,9 @@ export class World {
     this.materials.ground = makeMaterial(this.app, {
       texture: groundTexture, color: [1, 1, 1], tiling: detail, specular: [0.02, 0.02, 0.02], shininess: 4,
     });
-    this.materials.rock = makeMaterial(this.app, { color: [0.43, 0.43, 0.40] });
-    this.materials.wood = makeMaterial(this.app, { color: [0.48, 0.36, 0.24] });
-    this.materials.building = makeMaterial(this.app, { color: isForest ? [0.52, 0.47, 0.39] : [0.58, 0.61, 0.66] });
-    this.materials.zone = makeMaterial(this.app, {
-      color: [1, 0.48, 0.24], emissive: [1, 0.32, 0.10], opacity: 0.16, unlit: true,
-    });
 
     primitive(this.app, 'plane', [0, 0, 0], [MAP_SIZE, 1, MAP_SIZE], 0, this.materials.ground, this.group);
     await this.buildExactProps();
-
-    this.zoneEntity = primitive(this.app, 'cylinder', [0, 20, 0], [2, 46, 2], 0, this.materials.zone, this.group);
-    this.setZone(isForest ? 330 : 210, 0, 0);
   }
 
   async buildExactProps() {
@@ -116,7 +113,7 @@ export class World {
     for (const placement of spec.props) {
       const count = counts.get(placement.type) || 0;
       const limit = limits[placement.type] == null ? Infinity : limits[placement.type];
-      if (count < limit) urls.add(placement.path);
+      if (count < limit && placement.path !== PROCEDURAL_HOUSE) urls.add(placement.path);
       counts.set(placement.type, count + 1);
     }
     await Promise.all(Array.from(urls).map((url) => this.models.load(url).catch(() => null)));
@@ -126,6 +123,10 @@ export class World {
       const index = placed.get(placement.type) || 0;
       placed.set(placement.type, index + 1);
       const limit = limits[placement.type] == null ? Infinity : limits[placement.type];
+      if (placement.path === PROCEDURAL_HOUSE) {
+        if (index < limit) this.interiors.push(this.createEnterableHouse(placement));
+        continue;
+      }
       let entity = index < limit ? await this.models.instantiate(placement.path) : null;
       if (!entity) continue;
       const yawDegrees = placement.rotationY * 180 / Math.PI;
@@ -145,23 +146,123 @@ export class World {
         this.group.addChild(entity);
       }
     }
+    this.buildColliderGrid();
   }
 
-  setZone(radius, x, z) {
-    if (!this.zoneEntity) return;
-    this.zoneEntity.setLocalPosition(x || 0, 20, z || 0);
-    this.zoneEntity.setLocalScale(radius * 2, 46, radius * 2);
+  houseMaterial(key, color, emissive) {
+    const name = `house-${key}`;
+    let material = this.materials[name];
+    if (!material) {
+      material = makeMaterial(this.app, { color, emissive, specular: [0.05, 0.05, 0.05], shininess: 12 });
+      this.materials[name] = material;
+    }
+    return material;
+  }
+
+  createEnterableHouse(placement) {
+    const spec = placement.interior || {};
+    const width = spec.width || 9;
+    const depth = spec.depth || 9;
+    const height = spec.height || 5;
+    const door = spec.door || 2.6;
+    const wall = this.houseMaterial('wall', spec.tint || [0.58, 0.48, 0.36]);
+    const floor = this.houseMaterial('floor', [0.32, 0.25, 0.18]);
+    const roof = this.houseMaterial('roof', spec.roofTint || [0.28, 0.3, 0.32]);
+    const wood = this.houseMaterial('wood', [0.42, 0.31, 0.2]);
+    const glow = this.houseMaterial('glow', [1, 0.82, 0.45], [0.35, 0.27, 0.1]);
+    const root = new pc.Entity('enterable-house');
+    root.setPosition(placement.x, 0, placement.z);
+    root.setLocalEulerAngles(0, placement.rotationY * 180 / Math.PI, 0);
+    this.group.addChild(root);
+
+    primitive(this.app, 'box', [0, 0.05, 0], [width, 0.1, depth], 0, floor, root);
+    const thickness = 0.28;
+    primitive(this.app, 'box', [0, height / 2, depth / 2], [width, height, thickness], 0, wall, root);
+    primitive(this.app, 'box', [-width / 2, height / 2, 0], [thickness, height, depth], 0, wall, root);
+    primitive(this.app, 'box', [width / 2, height / 2, 0], [thickness, height, depth], 0, wall, root);
+    const side = (width - door) / 2;
+    primitive(this.app, 'box', [-(door + side) / 2, height / 2, -depth / 2], [side, height, thickness], 0, wall, root);
+    primitive(this.app, 'box', [(door + side) / 2, height / 2, -depth / 2], [side, height, thickness], 0, wall, root);
+    primitive(this.app, 'box', [0, door + (height - door) / 2, -depth / 2], [door, height - door, thickness], 0, wall, root);
+    primitive(this.app, 'box', [-door / 2, door / 2, -depth / 2 - 0.04], [0.18, door, 0.36], 0, wood, root);
+    primitive(this.app, 'box', [door / 2, door / 2, -depth / 2 - 0.04], [0.18, door, 0.36], 0, wood, root);
+    for (const windowX of [-width * 0.3, width * 0.3]) {
+      primitive(this.app, 'box', [windowX, height * 0.62, depth / 2 + 0.08], [1.4, 1, 0.08], 0, glow, root);
+    }
+    const roofEntity = primitive(
+      this.app, 'box', [0, height + 0.18, 0], [width + 0.9, 0.36, depth + 0.9], 0, roof, root,
+    );
+
+    primitive(this.app, 'box', [0, 0.78, depth * 0.16], [2.4, 0.16, 1.3], 0, wood, root);
+    primitive(this.app, 'box', [-0.95, 0.38, depth * 0.16], [0.16, 0.76, 0.16], 0, wood, root);
+    primitive(this.app, 'box', [0.95, 0.38, depth * 0.16], [0.16, 0.76, 0.16], 0, wood, root);
+    primitive(this.app, 'box', [width * 0.28, 0.34, -depth * 0.2], [1.8, 0.48, 2.4], 0, wood, root);
+    const crate = this.houseMaterial('crate', [0.58, 0.42, 0.22]);
+    primitive(this.app, 'box', [-width * 0.3, 0.45, depth * 0.24], [1.2, 0.9, 1], 0, crate, root);
+    primitive(this.app, 'box', [-width * 0.3, 1.35, depth / 2 - 0.25], [1.4, 0.12, 0.4], 0, wood, root);
+
+    const cosine = Math.cos(placement.rotationY);
+    const sine = Math.sin(placement.rotationY);
+    return {
+      x: placement.x,
+      z: placement.z,
+      rotation: placement.rotationY,
+      width,
+      depth,
+      right: { x: cosine, z: -sine },
+      back: { x: sine, z: cosine },
+      roof: roofEntity,
+      inside: false,
+      hideRadius: Math.max(width, depth) * 0.52 + 1.2,
+    };
+  }
+
+  buildColliderGrid() {
+    const cell = this.colliderCell;
+    this.colliderGrid.clear();
+    for (const collider of this.colliders) {
+      const minX = Math.floor((collider.x - collider.r) / cell);
+      const maxX = Math.floor((collider.x + collider.r) / cell);
+      const minZ = Math.floor((collider.z - collider.r) / cell);
+      const maxZ = Math.floor((collider.z + collider.r) / cell);
+      for (let gx = minX; gx <= maxX; gx += 1) {
+        for (let gz = minZ; gz <= maxZ; gz += 1) {
+          const key = `${gx}:${gz}`;
+          let bucket = this.colliderGrid.get(key);
+          if (!bucket) {
+            bucket = [];
+            this.colliderGrid.set(key, bucket);
+          }
+          bucket.push(collider);
+        }
+      }
+    }
   }
 
   resolve(position, radius) {
-    for (const collider of this.colliders) {
-      const dx = position.x - collider.x;
-      const dz = position.z - collider.z;
-      const distance = Math.hypot(dx, dz);
-      const minimum = radius + collider.r;
-      if (distance < minimum && distance > 0.0001) {
-        position.x = collider.x + (dx / distance) * minimum;
-        position.z = collider.z + (dz / distance) * minimum;
+    const cell = this.colliderCell;
+    const reach = radius + 2;
+    const minX = Math.floor((position.x - reach) / cell);
+    const maxX = Math.floor((position.x + reach) / cell);
+    const minZ = Math.floor((position.z - reach) / cell);
+    const maxZ = Math.floor((position.z + reach) / cell);
+    const stamp = ++this.queryStamp;
+    for (let gx = minX; gx <= maxX; gx += 1) {
+      for (let gz = minZ; gz <= maxZ; gz += 1) {
+        const bucket = this.colliderGrid.get(`${gx}:${gz}`);
+        if (!bucket) continue;
+        for (const collider of bucket) {
+          if (collider.queryStamp === stamp) continue;
+          collider.queryStamp = stamp;
+          const dx = position.x - collider.x;
+          const dz = position.z - collider.z;
+          const minimum = radius + collider.r;
+          const distanceSquared = dx * dx + dz * dz;
+          if (distanceSquared >= minimum * minimum || distanceSquared <= 0.00000001) continue;
+          const distance = Math.sqrt(distanceSquared);
+          position.x = collider.x + (dx / distance) * minimum;
+          position.z = collider.z + (dz / distance) * minimum;
+        }
       }
     }
     const limit = MAP_SIZE / 2 - 5;
@@ -170,20 +271,36 @@ export class World {
   }
 
   raycast(origin, direction, maxDistance) {
+    const a = direction.x * direction.x + direction.z * direction.z;
+    if (a < 0.000001) return maxDistance;
+    const cell = this.colliderCell;
+    const endX = origin.x + direction.x * maxDistance;
+    const endZ = origin.z + direction.z * maxDistance;
+    const minX = Math.floor((Math.min(origin.x, endX) - 2) / cell);
+    const maxX = Math.floor((Math.max(origin.x, endX) + 2) / cell);
+    const minZ = Math.floor((Math.min(origin.z, endZ) - 2) / cell);
+    const maxZ = Math.floor((Math.max(origin.z, endZ) + 2) / cell);
+    const stamp = ++this.queryStamp;
     let closest = maxDistance;
-    for (const collider of this.colliders) {
-      const ox = origin.x - collider.x;
-      const oz = origin.z - collider.z;
-      const a = direction.x * direction.x + direction.z * direction.z;
-      if (a < 0.000001) continue;
-      const b = 2 * (ox * direction.x + oz * direction.z);
-      const c = ox * ox + oz * oz - collider.r * collider.r;
-      const discriminant = b * b - 4 * a * c;
-      if (discriminant < 0) continue;
-      const t = (-b - Math.sqrt(discriminant)) / (2 * a);
-      if (t <= 0 || t >= closest) continue;
-      const y = origin.y + direction.y * t;
-      if (y >= -0.5 && y <= collider.h + 0.5) closest = t;
+    for (let gx = minX; gx <= maxX; gx += 1) {
+      for (let gz = minZ; gz <= maxZ; gz += 1) {
+        const bucket = this.colliderGrid.get(`${gx}:${gz}`);
+        if (!bucket) continue;
+        for (const collider of bucket) {
+          if (collider.queryStamp === stamp) continue;
+          collider.queryStamp = stamp;
+          const ox = origin.x - collider.x;
+          const oz = origin.z - collider.z;
+          const b = 2 * (ox * direction.x + oz * direction.z);
+          const c = ox * ox + oz * oz - collider.r * collider.r;
+          const discriminant = b * b - 4 * a * c;
+          if (discriminant < 0) continue;
+          const t = (-b - Math.sqrt(discriminant)) / (2 * a);
+          if (t <= 0 || t >= closest) continue;
+          const y = origin.y + direction.y * t;
+          if (y >= -0.5 && y <= collider.h + 0.5) closest = t;
+        }
+      }
     }
     return closest;
   }
@@ -191,5 +308,8 @@ export class World {
   destroy() {
     if (this.sun) this.sun.destroy();
     this.group.destroy();
+    this.colliderGrid.clear();
+    this.colliders.length = 0;
+    this.interiors.length = 0;
   }
 }

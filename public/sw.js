@@ -1,4 +1,4 @@
-const CACHE = 'adybe-v16';
+const CACHE = 'adybe-v23';
 const ASSETS = [
   './',
   './index.html',
